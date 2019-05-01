@@ -458,7 +458,7 @@ class LocalNxapi:
         commands = to_list(commands)
         try:
             resp, msg_timestamps = self.send_request(commands, output='config', check_status=True,
-                                                    return_error=return_error, opts=opts)
+                                                     return_error=return_error, opts=opts)
         except ValueError as exc:
             code = getattr(exc, 'code', 1)
             message = getattr(exc, 'err', exc)
