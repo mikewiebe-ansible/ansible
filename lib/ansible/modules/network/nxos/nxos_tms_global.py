@@ -39,10 +39,10 @@ options:
   # Top-level commands
   certificate:
     description:
-      - Path to the SSL/TLS certificate key and destination host for telemetry data.
-        Valid value is a list of str(s) containing [SSL_TLS_KEY, HOSTNAME].
+      - Certificate SSL/TLS and hostname values.
+      - Value must be a dict defining values for keys: key and hostname.
     required: false
-    type: list
+    type: dict
   destination_profile_compression:
     description:
       - Destination compression method.
@@ -63,7 +63,9 @@ options:
 '''
 EXAMPLES = '''
 - nxos_tms_global:
-    certificate: ['/bootflash/server.key', 'localhost']
+    certificate:
+      key: /bootflash/server.key
+      hostname: localhost
     destination_profile_compression: gzip
     destination_profile_vrf: management
 '''
@@ -99,10 +101,12 @@ _template: # _template holds common settings for all commands
 
 certificate:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
-  kind: list
-  getval: certificate (\S+) (\S+)$
-  setval: 'certificate {0} {1}'
-  default: ~
+  kind: dict
+  getval: certificate (?P<key>\S+) (?P<hostname>\S+)$
+  setval: certificate {key} {hostname}
+  default:
+    key: ~
+    hostname: ~
 
 destination_profile_compression:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
@@ -124,7 +128,7 @@ destination_profile_vrf:
 
 def main():
     argument_spec = dict(
-        certificate=dict(required=False, type='list'),
+        certificate=dict(required=False, type='dict'),
         destination_profile_compression=dict(required=False, type='str', choices=['gzip']),
         destination_profile_vrf=dict(required=False, type='str'),
         state=dict(choices=['present', 'absent'], default='present', required=False),

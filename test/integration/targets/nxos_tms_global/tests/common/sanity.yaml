@@ -6,7 +6,9 @@
 - name: set facts common
   # nd_* vars are "non-default" values
   set_fact:
-    certificate: ['/bootflash/server.key', 'localhost']
+    certificate:
+      key: /bootflash/server.key
+      hostname: localhost
     destination_profile_compression: gzip
     destination_profile_vrf: management
 
@@ -50,12 +52,7 @@
   - assert: *true
 
   - name: TMS defaults - absent - idempotence
-    nxos_tms_global:
-      certificate: "{{ certificate }}"
-      destination_profile_compression: "{{ destination_profile_compression }}"
-      destination_profile_vrf: "{{ destination_profile_vrf }}"
-      state: absent
-      provider: "{{ connection }}"
+    nxos_tms_global: *tms_def
     register: result
 
   - assert: *false
