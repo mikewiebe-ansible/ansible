@@ -1,0 +1,57 @@
+---
+- debug: msg="START connection={{ ansible_connection }} nxos_tms_destgroup sanity test"
+- debug: msg="Using provider={{ connection.transport }}"
+  when: ansible_connection == "local"
+
+- name: set facts common
+  # nd_* vars are "non-default" values
+  set_fact:
+    identifier: 4
+
+- name: Setup
+  nxos_feature: &setup_teardown
+    feature: telemetry
+    provider: "{{ connection }}"
+    state: disabled
+  ignore_errors: yes
+
+- block:
+  - name: TMS non defaults - present
+    nxos_tms_destgroup: &tms_non_def
+      identifier: "{{ identifier }}"
+      provider: "{{ connection }}"
+    register: result
+
+  - assert: &true
+      that:
+        - "result.changed == true"
+
+  - name: TMS non defaults - present - idempotence
+    nxos_tms_destgroup: *tms_non_def
+    register: result
+
+  - assert: &false
+      that:
+        - "result.changed == false"
+
+  - name: TMS defaults - absent
+    nxos_tms_destgroup: &tms_def
+      identifier: "{{ identifier }}"
+      state: absent
+      provider: "{{ connection }}"
+    register: result
+
+  - assert: *true
+
+  - name: TMS defaults - absent - idempotence
+    nxos_tms_destgroup: *tms_def
+    register: result
+
+  - assert: *false
+
+  always:
+  - name: Teardown
+    nxos_feature: *setup_teardown
+    ignore_errors: yes
+
+  - debug: msg="END connection={{ ansible_connection }} nxos_tms_destgroup sanity test"

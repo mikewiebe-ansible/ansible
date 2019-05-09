@@ -1,5 +1,5 @@
 ---
-- debug: msg="START connection={{ ansible_connection }} nxos_bfd_tms sanity test"
+- debug: msg="START connection={{ ansible_connection }} nxos_tms_global sanity test"
 - debug: msg="Using provider={{ connection.transport }}"
   when: ansible_connection == "local"
 
