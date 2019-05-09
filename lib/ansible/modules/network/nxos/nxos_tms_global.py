@@ -36,7 +36,6 @@ notes:
     - Not supported on N3K/N5K/N6K/N7K
     - Module will automatically enable 'feature telemetry' if it is disabled.
 options:
-  # Top-level commands
   certificate:
     description:
       - Certificate SSL/TLS and hostname values.

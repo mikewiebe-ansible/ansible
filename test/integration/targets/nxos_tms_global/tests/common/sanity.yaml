@@ -10,6 +10,7 @@
       key: /bootflash/server.key
       hostname: localhost
     destination_profile_compression: gzip
+    destination_profile_source_interface: Loopback55
     destination_profile_vrf: management
 
 - name: Setup
@@ -24,6 +25,7 @@
     nxos_tms_global: &tms_non_def
       certificate: "{{ certificate }}"
       destination_profile_compression: "{{ destination_profile_compression }}"
+      destination_profile_source_interface: "{{ destination_profile_source_interface }}"
       destination_profile_vrf: "{{ destination_profile_vrf }}"
       provider: "{{ connection }}"
     register: result
@@ -44,6 +46,7 @@
     nxos_tms_global: &tms_def
       certificate: "{{ certificate }}"
       destination_profile_compression: "{{ destination_profile_compression }}"
+      destination_profile_source_interface: "{{ destination_profile_source_interface }}"
       destination_profile_vrf: "{{ destination_profile_vrf }}"
       state: absent
       provider: "{{ connection }}"
