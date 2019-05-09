@@ -45,12 +45,18 @@ options:
     type: dict
   destination_profile_compression:
     description:
-      - Destination compression method.
+      - Destination profile compression method.
     required: false
     choices: ['gzip']
+  destination_profile_source_interface:
+    description:
+      - Destination profile source interface.
+        Valid value is a str representing the source interface name.
+    required: false
+    type: str
   destination_profile_vrf:
     description:
-      - Destination VRF.
+      - Destination profile vrf.
         Valid value is a str representing the vrf name.
     required: false
     type: str
@@ -67,6 +73,7 @@ EXAMPLES = '''
       key: /bootflash/server.key
       hostname: localhost
     destination_profile_compression: gzip
+    destination_profile_source_interface: Ethernet1/1
     destination_profile_vrf: management
 '''
 
@@ -79,7 +86,7 @@ cmds:
 '''
 
 import re, yaml
-from ansible.module_utils.network.nxos.nxos import NxosCmdRef
+from ansible.module_utils.network.nxos.nxos import NxosCmdRef, normalize_interface
 from ansible.module_utils.network.nxos.nxos import nxos_argument_spec, check_args
 from ansible.module_utils.network.nxos.nxos import load_config, run_commands
 from ansible.module_utils.basic import AnsibleModule
@@ -112,7 +119,15 @@ destination_profile_compression:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
   kind: str
   getval: use-compression (\S+)$
-  setval: 'use-compression {1}'
+  setval: 'use-compression {0}'
+  default: ~
+  context: [telemetry, destination-profile]
+
+destination_profile_source_interface:
+  _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
+  kind: str
+  getval: source-interface (\S+)$
+  setval: 'source-interface {0}'
   default: ~
   context: [telemetry, destination-profile]
 
@@ -120,7 +135,7 @@ destination_profile_vrf:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
   kind: str
   getval: use-vrf (\S+)$
-  setval: 'use-vrf {1}'
+  setval: 'use-vrf {0}'
   default: ~
   context: [telemetry, destination-profile]
 """
@@ -131,12 +146,18 @@ def main():
         certificate=dict(required=False, type='dict'),
         destination_profile_compression=dict(required=False, type='str', choices=['gzip']),
         destination_profile_vrf=dict(required=False, type='str'),
+        destination_profile_source_interface=dict(required=False, type='str'),
         state=dict(choices=['present', 'absent'], default='present', required=False),
     )
     argument_spec.update(nxos_argument_spec)
     module = AnsibleModule(argument_spec=argument_spec, supports_check_mode=True)
     warnings = list()
     check_args(module, warnings)
+
+    # Normalize interface name.
+    int = module.params.get('destination_profile_source_interface')
+    if int:
+        module.params['destination_profile_source_interface'] = normalize_interface(int)
 
     cmd_ref = NxosCmdRef(module, TMS_CMD_REF)
     cmd_ref.get_existing()
