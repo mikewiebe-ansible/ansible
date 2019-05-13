@@ -55,7 +55,13 @@
   - assert: *true
 
   - name: TMS defaults - absent - idempotence
-    nxos_tms_global: *tms_def
+    nxos_tms_global:
+      certificate: "{{ certificate }}"
+      destination_profile_compression: "{{ destination_profile_compression }}"
+      destination_profile_source_interface: "{{ destination_profile_source_interface }}"
+      destination_profile_vrf: "{{ destination_profile_vrf }}"
+      state: absent
+      provider: "{{ connection }}"
     register: result
 
   - assert: *false

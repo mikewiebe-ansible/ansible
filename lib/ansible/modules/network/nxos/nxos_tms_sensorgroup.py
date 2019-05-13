@@ -47,7 +47,7 @@ options:
       - Telemetry data source.
       - Valid value is a str representing the data source.
     required: false
-    choices: ['nxapi', 'dme']
+    choices: ['NX-API', 'DME']
   path:
     description:
       - Telemetry sensor path.
@@ -123,10 +123,10 @@ path:
   getval: path (?P<name>\S+) depth (?P<depth>\S+) query-condition (?P<query_condition>\S+) filter-condition (?P<filter_condition>\S+)$
   setval: path {name} depth {depth} query-condition {query_condition} filter-condition {filter_condition}
   default:
-    ip: ~
-    port: ~
-    protocol: ~
-    encoding: ~
+    name: ~
+    depth: ~
+    query_condition: ~
+    filter_condition: ~
   context: ['telemetry', 'setval::identifier']
 """
 
@@ -134,7 +134,7 @@ path:
 def main():
     argument_spec = dict(
         identifier=dict(required=True, type='int'),
-        data_source=dict(choices=['nxapi', 'dme'], required=False),
+        data_source=dict(choices=['NX-API', 'DME'], required=False),
         path=dict(required=False, type='dict'),
         state=dict(choices=['present', 'absent'], default='present', required=False),
     )

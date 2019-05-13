@@ -973,18 +973,31 @@ class NxosCmdRef:
             if cmd:
                 if 'absent' == ref['_state'] and not re.search(r'^no', cmd):
                     cmd = 'no ' + cmd
-                # This command may require parent commands for proper context
-                # Global _template context is replaced by parameter context
-                parent_context = ref['_template'].get('context', [])
-                parent_context = ref[k].get('context', parent_context)
-                for context in parent_context:
-                    if isinstance(context, list):
-                        for ctx_cmd in context:
-                            proposed.append(ctx_cmd)
-                    elif isinstance(context, str):
-                        proposed.append(context)
+                # Add processed command to cmd_ref object
+                ref[k]['setcmd'] = cmd
 
-                proposed.append(cmd)
+        # Commands may require parent commands for proper context.
+        # Global _template context is replaced by parameter context
+        for k in play_keys:
+            if ref[k].get('setcmd') is None:
+                continue
+            parent_context = ref['_template'].get('context', [])
+            parent_context = ref[k].get('context', parent_context)
+            if isinstance(parent_context, list):
+                for ctx_cmd in parent_context:
+                    if re.search(r'setval::', ctx_cmd):
+                        ctx_cmd = ref[ctx_cmd.split('::')[1]].get('setcmd')
+                        if ctx_cmd is None:
+                            continue
+                    proposed.append(ctx_cmd)
+            elif isinstance(parent_context, str):
+                if re.search(r'setval::', parent_context):
+                    parent_context = ref[parent_context.split('::')[1]].get('setcmd')
+                    if parent_context is None:
+                        continue
+                proposed.append(parent_config)
+
+            proposed.append(ref[k]['setcmd'])
 
         return proposed
 

@@ -1,5 +1,5 @@
 ---
-- debug: msg="START connection={{ ansible_connection }} nxos_tms_destgroup sanity test"
+- debug: msg="START connection={{ ansible_connection }} nxos_tms_sensorgroup sanity test"
 - debug: msg="Using provider={{ connection.transport }}"
   when: ansible_connection == "local"
 
@@ -7,11 +7,12 @@
   # nd_* vars are "non-default" values
   set_fact:
     identifier: 4
-    destination:
-      ip: 192.168.0.1
-      port: 50001
-      protocol: gRPC
-      encoding: GPB
+    data_source: 'NX-API'
+    path:
+      name: foo
+      depth: 0
+      query_condition: query_condition
+      filter_condition: filter_condition
 
 - name: Setup
   nxos_feature: &setup_teardown
@@ -22,9 +23,10 @@
 
 - block:
   - name: TMS non defaults - present
-    nxos_tms_destgroup: &tms_non_def
+    nxos_tms_sensorgroup: &tms_non_def
       identifier: "{{ identifier }}"
-      destination: "{{ destination }}"
+      data_source: "{{ data_source }}"
+      path: "{{ path }}"
       provider: "{{ connection }}"
     register: result
 
@@ -35,7 +37,7 @@
   #- meta: end_play
 
   - name: TMS non defaults - present - idempotence
-    nxos_tms_destgroup: *tms_non_def
+    nxos_tms_sensorgroup: *tms_non_def
     register: result
 
   - assert: &false
@@ -43,9 +45,8 @@
         - "result.changed == false"
 
   - name: TMS defaults - absent
-    nxos_tms_destgroup: &tms_def
+    nxos_tms_sensorgroup: &tms_def
       identifier: "{{ identifier }}"
-      destination: "{{ destination }}"
       state: absent
       provider: "{{ connection }}"
     register: result
@@ -53,7 +54,7 @@
   - assert: *true
 
   - name: TMS defaults - absent - idempotence
-    nxos_tms_destgroup: *tms_def
+    nxos_tms_sensorgroup: *tms_def
     register: result
 
   - assert: *false
@@ -63,4 +64,4 @@
     nxos_feature: *setup_teardown
     ignore_errors: yes
 
-  - debug: msg="END connection={{ ansible_connection }} nxos_tms_destgroup sanity test"
+  - debug: msg="END connection={{ ansible_connection }} nxos_tms_sensorgroup sanity test"

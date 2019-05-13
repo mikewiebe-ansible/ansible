@@ -118,11 +118,11 @@ destination_group:
 sensor_group:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
   kind: dict
-  getval: snsr-grp (?P<grp>\S+) sample-interval (?P<interval>\S+)$
-  setval: snsr-grp {grp} sample-interval {interval}
+  getval: snsr-grp (?P<id>\S+) sample-interval (?P<sample_interval>\S+)$
+  setval: snsr-grp {id} sample-interval {sample_interval}
   default:
-    grp: ~
-    interval: ~
+    id: ~
+    sample_interval: ~
   context: ['telemetry', 'setval::identifier']
 """
 

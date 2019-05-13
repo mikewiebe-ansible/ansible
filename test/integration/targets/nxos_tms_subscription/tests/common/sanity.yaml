@@ -1,0 +1,88 @@
+---
+- debug: msg="START connection={{ ansible_connection }} nxos_tms_subscription sanity test"
+- debug: msg="Using provider={{ connection.transport }}"
+  when: ansible_connection == "local"
+
+- name: set facts common
+  # nd_* vars are "non-default" values
+  set_fact:
+    identifier: 4
+    destination_group: 5
+    sensor_group:
+      id: 6
+      sample_interval: 1000
+
+- name: Setup
+  nxos_feature: &setup_teardown
+    feature: telemetry
+    provider: "{{ connection }}"
+    state: disabled
+  ignore_errors: yes
+
+- name: Configure supporting destgroup
+  nxos_tms_destgroup:
+    identifier: 5
+    destination:
+      ip: 192.168.0.1
+      port: 50001
+      protocol: gRPC
+      encoding: GPB
+    provider: "{{ connection }}"
+
+- name: Configure supporting sensorgroup
+  nxos_tms_sensorgroup:
+    identifier: 6
+    data_source: "NX-API"
+    path:
+      name: foo
+      depth: 0
+      query_condition: query_condition
+      filter_condition: filter_condition
+    provider: "{{ connection }}"
+
+- block:
+  - name: TMS non defaults - present
+    nxos_tms_subscription: &tms_non_def
+      identifier: "{{ identifier }}"
+      destination_group: "{{ destination_group }}"
+      sensor_group: "{{ sensor_group }}"
+      provider: "{{ connection }}"
+    register: result
+
+  - assert: &true
+      that:
+        - "result.changed == true"
+
+  #- meta: end_play
+
+  - name: TMS non defaults - present - idempotence
+    nxos_tms_subscription: *tms_non_def
+    register: result
+
+  - assert: &false
+      that:
+        - "result.changed == false"
+
+  - name: TMS defaults - absent
+    nxos_tms_subscription: &tms_def
+      identifier: "{{ identifier }}"
+      destination_group: "{{ destination_group }}"
+      sensor_group: "{{ sensor_group }}"
+      state: absent
+      provider: "{{ connection }}"
+    register: result
+
+  - assert: *true
+
+  - name: TMS defaults - absent - idempotence
+    nxos_tms_subscription: *tms_def
+    register: result
+
+  - assert: *false
+
+  always:
+  - name: Teardown
+    nxos_feature: *setup_teardown
+    ignore_errors: yes
+
+  - debug: msg="END connection={{ ansible_connection }} nxos_tms_subscription sanity test"
