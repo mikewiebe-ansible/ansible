@@ -23,12 +23,12 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 
 DOCUMENTATION = '''
 ---
-module: nxos_tms_destgroup
+module: nxos_tms_sensorgroup
 extends_documentation_fragment: nxos
 version_added: "2.9"
-short_description: Telemetry Monitoring Service (TMS) destination-group configuration
+short_description: Telemetry Monitoring Service (TMS) sensor-group configuration
 description:
-  - Manages Telemetry Monitoring Service (TMS) destination-group configuration.
+  - Manages Telemetry Monitoring Service (TMS) sensor-group configuration.
 
 author: Mike Wiebe (@mikewiebe)
 notes:
@@ -38,14 +38,20 @@ notes:
 options:
   identifier:
     description:
-      - Destination group identifier.
-      - Value must be a int representing the destination group identifier.
+      - Sensor group identifier.
+      - Value must be a int representing the sensor group identifier.
     required: true
     type: int
-  destination:
+  data_source:
     description:
-      - Group destination ipv4, port, protocol and encoding values.
-      - Value must be a dict defining values for keys: ip, port, protocol, encoding.
+      - Telemetry data source.
+      - Valid value is a str representing the data source.
+    required: false
+    choices: ['nxapi', 'dme']
+  path:
+    description:
+      - Telemetry sensor path.
+      - Value must be a dict defining values for keys: name, depth, filter_condition, query_condition.
     required: false
     type: dict
   state:
@@ -56,13 +62,14 @@ options:
     default: ['present']
 '''
 EXAMPLES = '''
-- nxos_tms_destgroup:
+- nxos_tms_sensorgroup:
     identifier: 2
-    destination:
-      ip: 192.168.1.1
-      port: 50001
-      protocol: grpc
-      encoding: gpb
+    data_source: nxapi
+    path:
+      name: 'sys/bgp/inst/dom-default/peer-[10.10.10.11/ent-[10.10.10.11]]'
+      depth: 0
+      filter_condition: 'or(eq(ethpmPhysIf.operSt,"down"),eq(ethpmPhysIf.operSt,"up"))'
+      query_condition: query_condition
 '''
 
 RETURN = '''
@@ -70,7 +77,7 @@ cmds:
     description: commands sent to the device
     returned: always
     type: list
-    sample: ["telemetry", "destination-group 2", "ip address 192.168.1.1 port 50001 protocol gRPC encoding GPB "]
+    sample: ["telemetry", "sensor-group 4", "data-source NX-API"]
 '''
 
 import re, yaml
@@ -98,15 +105,23 @@ _template: # _template holds common settings for all commands
 identifier:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
   kind: int
-  getval: destination-group (\S+)$
-  setval: 'destination-group {0}'
+  getval: sensor-group (\S+)$
+  setval: 'sensor-group {0}'
   default: ~
 
-destination:
+data_source:
+  _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
+  kind: str
+  getval: data-source (\S+)$
+  setval: 'data-source {0}'
+  default: ~
+  context: ['telemetry', 'setval::identifier']
+
+path:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
   kind: dict
-  getval: ip address (?P<ip>\S+) port (?P<port>\S+) protocol (?P<protocol>\S+) encoding (?P<encoding>\S+)$
-  setval: ip address {ip} port {port} protocol {protocol} encoding {encoding}
+  getval: path (?P<name>\S+) depth (?P<depth>\S+) query-condition (?P<query_condition>\S+) filter-condition (?P<filter_condition>\S+)$
+  setval: path {name} depth {depth} query-condition {query_condition} filter-condition {filter_condition}
   default:
     ip: ~
     port: ~
@@ -119,7 +134,8 @@ destination:
 def main():
     argument_spec = dict(
         identifier=dict(required=True, type='int'),
-        destination=dict(required=False, type='dict'),
+        data_source=dict(choices=['nxapi', 'dme'], required=False),
+        path=dict(required=False, type='dict'),
         state=dict(choices=['present', 'absent'], default='present', required=False),
     )
     argument_spec.update(nxos_argument_spec)

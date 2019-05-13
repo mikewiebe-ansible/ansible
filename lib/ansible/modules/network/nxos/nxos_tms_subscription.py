@@ -23,12 +23,12 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 
 DOCUMENTATION = '''
 ---
-module: nxos_tms_destgroup
+module: nxos_tms_subscription
 extends_documentation_fragment: nxos
 version_added: "2.9"
-short_description: Telemetry Monitoring Service (TMS) destination-group configuration
+short_description: Telemetry Monitoring Service (TMS) subscription configuration
 description:
-  - Manages Telemetry Monitoring Service (TMS) destination-group configuration.
+  - Manages Telemetry Monitoring Service (TMS) subscription configuration.
 
 author: Mike Wiebe (@mikewiebe)
 notes:
@@ -38,14 +38,20 @@ notes:
 options:
   identifier:
     description:
-      - Destination group identifier.
-      - Value must be a int representing the destination group identifier.
+      - Subscription identifier.
+      - Value must be a int representing the subscription identifier.
     required: true
     type: int
-  destination:
+  destination_group:
     description:
-      - Group destination ipv4, port, protocol and encoding values.
-      - Value must be a dict defining values for keys: ip, port, protocol, encoding.
+      - Associated destination group.
+      - Value must be a int representing the associated destination group.
+    required: false
+    type: int
+  sensor_group:
+    description:
+      - Associated sensor group.
+      - Value must be a dict defining values for keys: id, sample_interval.
     required: false
     type: dict
   state:
@@ -57,12 +63,11 @@ options:
 '''
 EXAMPLES = '''
 - nxos_tms_destgroup:
-    identifier: 2
-    destination:
-      ip: 192.168.1.1
-      port: 50001
-      protocol: grpc
-      encoding: gpb
+    identifier: 5
+    destination_group: 4
+    sensor_group:
+      id: 3
+      sampe_interval: 1000
 '''
 
 RETURN = '''
@@ -70,7 +75,7 @@ cmds:
     description: commands sent to the device
     returned: always
     type: list
-    sample: ["telemetry", "destination-group 2", "ip address 192.168.1.1 port 50001 protocol gRPC encoding GPB "]
+    sample: ["telemetry", "subscription 5", "dst-grp 5"]
 '''
 
 import re, yaml
@@ -98,20 +103,26 @@ _template: # _template holds common settings for all commands
 identifier:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
   kind: int
-  getval: destination-group (\S+)$
-  setval: 'destination-group {0}'
+  getval: subscription (\S+)$
+  setval: 'subscription {0}'
   default: ~
 
-destination:
+destination_group:
+  _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
+  kind: int
+  getval: dst-grp (\S+)$
+  setval: 'dst-grp {0}'
+  default: ~
+  context: ['telemetry', 'setval::identifier']
+
+sensor_group:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
   kind: dict
-  getval: ip address (?P<ip>\S+) port (?P<port>\S+) protocol (?P<protocol>\S+) encoding (?P<encoding>\S+)$
-  setval: ip address {ip} port {port} protocol {protocol} encoding {encoding}
+  getval: snsr-grp (?P<grp>\S+) sample-interval (?P<interval>\S+)$
+  setval: snsr-grp {grp} sample-interval {interval}
   default:
-    ip: ~
-    port: ~
-    protocol: ~
-    encoding: ~
+    grp: ~
+    interval: ~
   context: ['telemetry', 'setval::identifier']
 """
 
@@ -119,7 +130,8 @@ destination:
 def main():
     argument_spec = dict(
         identifier=dict(required=True, type='int'),
-        destination=dict(required=False, type='dict'),
+        destination_group=dict(required=True, type='int'),
+        sensor_group=dict(required=False, type='dict'),
         state=dict(choices=['present', 'absent'], default='present', required=False),
     )
     argument_spec.update(nxos_argument_spec)
