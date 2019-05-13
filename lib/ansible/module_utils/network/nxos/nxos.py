@@ -31,6 +31,7 @@
 import collections
 import json
 import re
+import sys
 import yaml
 
 from ansible.module_utils._text import to_text
@@ -41,6 +42,9 @@ from ansible.module_utils.common._collections_compat import Mapping
 from ansible.module_utils.network.common.config import NetworkConfig, dumps
 from ansible.module_utils.six import iteritems, string_types
 from ansible.module_utils.urls import fetch_url
+
+PY2 = sys.version_info[0] == 2
+PY3 = sys.version_info[0] == 3
 
 _DEVICE_CONNECTION = None
 
@@ -682,30 +686,44 @@ class NxosCmdRef:
       # Common getter syntax for BFD commands
       get_command: show run bfd all | incl '^(no )*bfd'
 
-    echo_rx_interval:
-      kind: int
-      getval: bfd echo-rx-interval (\d+)$
-      setval: bfd echo-rx-interval {0}
-      default: 50
+    interval:
+      kind: dict
+      getval: bfd interval (?P<tx>\\d+) min_rx (?P<min_rx>\\d+) multiplier (?P<multiplier>\\d+)
+      setval: bfd interval {tx} min_rx {min_rx} multiplier {multiplier}
+      default:
+        tx: 50
+        min_rx: 50
+        multiplier: 3
       N3K:
-        default: 250
+        # Platform overrides
+        default:
+          tx: 250
+          min_rx: 250
+          multiplier: 3
     """
 
     def __init__(self, module, cmd_ref_str):
         """Initialize cmd_ref from yaml data."""
         self._module = module
-        ref = self._ref = yaml.load(cmd_ref_str)
+        if PY2:
+            self._ref = yaml.load(cmd_ref_str)
+        else:
+            self._ref = yaml.load(cmd_ref_str, Loader=yaml.FullLoader)
+        ref = self._ref
+
         # Process module state key
         if self._module.params.get('state') is None:
             ref['_state'] = 'present'
         else:
             ref['_state'] = self._module.params.get('state')
+
         # Create a list of supported commands based on ref keys
         ref['commands'] = [k for k in ref if not k.startswith('_')]
         ref['commands'].sort()
         ref['_proposed'] = []
         self.feature_enable()
         self.get_platform_defaults()
+        self.normalize_defaults()
 
     def __getitem__(self, key=None):
         if key is None:
@@ -725,38 +743,50 @@ class NxosCmdRef:
                 ref['_proposed'].append('feature {0}'.format(feature))
                 ref['_cli_is_feature_disabled'] = ref['_proposed']
 
-
-    def get_platform_id(self):
-        """Query device for platform type"""
-        info = get_capabilities(self._module).get('device_info')
-        os_platform = info.get('network_os_platform')
-        plat = None
-
-        # Supported Platform IDs (N35 N3K N5K N6K N7K N9K)
-        if not os_platform:
+    def get_platform_shortname(self):
+        """Query device for platform type, normalize to a shortname/nickname.
+        Returns platform shortname (e.g. 'N3K-3058P' returns 'N3K') or None.
+        """
+        # TBD: add this method logic to get_capabilities() after those methods
+        #      are made consistent across transports
+        platform_info = self.execute_show_command('show inventory', 'json')
+        if not platform_info or not isinstance(platform_info, dict):
             return None
-        m = re.match('([CN][35679][K57])-', os_platform)
+        inventory_table = platform_info['TABLE_inv']['ROW_inv']
+        for info in inventory_table:
+            if 'Chassis' in info['name']:
+                network_os_platform = info['productid']
+                break
+        else:
+            return None
+
+        # Supported Platforms: N3K,N5K,N6K,N7K,N9K,N3K-F,N9K-F
+        m = re.match('(?P<short>N[35679][K57])-(?P<N35>C35)*', network_os_platform)
         if not m:
             return None
-        plat = m.group(1)
+        shortname = m.group('short')
 
         # Normalize
-        if re.search('C35', plat):
-            plat = 'N35'
-        if re.match('N77', plat):
-            plat = 'N7K'
-
-        # TBD: Fretta check needs linecard productid
-        return plat
-
+        if m.groupdict().get('N35'):
+            shortname = 'N35'
+        elif re.match('N77', shortname):
+            shortname = 'N7K'
+        elif re.match(r'N3K|N9K', shortname):
+            for info in inventory_table:
+                if '-R' in info['productid']:
+                    # Fretta Platform
+                    shortname += '-F'
+                    break
+        return shortname
 
     def get_platform_defaults(self):
         """Update ref with platform specific defaults"""
-        plat = self.get_platform_id()
+        plat = self.get_platform_shortname()
         if not plat:
             return
 
         ref = self._ref
+        ref['_platform_shortname'] = plat
         # Remove excluded commands (no platform support for command)
         for k in ref['commands']:
             if plat in ref[k].get('_exclude', ''):
@@ -767,6 +797,22 @@ class NxosCmdRef:
         for k in plat_spec_cmds:
             for plat_key in ref[k][plat]:
                 ref[k][plat_key] = ref[k][plat][plat_key]
+
+    def normalize_defaults(self):
+        """Update ref defaults with normalized data"""
+        ref = self._ref
+        for k in ref['commands']:
+            if 'default' in ref[k] and ref[k]['default']:
+                kind = ref[k]['kind']
+                if 'int' == kind:
+                    ref[k]['default'] = int(ref[k]['default'])
+                elif 'list' == kind:
+                    ref[k]['default'] = [str(i) for i in ref[k]['default']]
+                elif 'dict' == kind:
+                    for key, v in ref[k]['default'].items():
+                        if v:
+                            v = str(v)
+                        ref[k]['default'][key] = v
 
     def execute_show_command(self, command, format):
         """Generic show command helper.
@@ -790,7 +836,6 @@ class NxosCmdRef:
                 raise
         return output
 
-
     def pattern_match_existing(self, output, k):
         """Pattern matching helper for `get_existing`.
         `k` is the command name string. Use the pattern from cmd_ref to
@@ -813,7 +858,7 @@ class NxosCmdRef:
             if len(match) > 1:
                 # TBD: Add support for multiple instances
                 raise "get_existing: multiple match instances are not currently supported"
-            match = list(match[0]) # tuple to list
+            match = list(match[0])  # tuple to list
 
             # Handle config strings that nvgen with the 'no' prefix.
             # Example match behavior:
@@ -828,7 +873,6 @@ class NxosCmdRef:
                     return None
 
         return match
-
 
     def get_existing(self):
         """Update ref with existing command states from the device.
@@ -858,13 +902,13 @@ class NxosCmdRef:
                 # match up with the setval named placeholder keys; e.g.
                 #   getval: my-cmd (?P<foo>\d+) bar (?P<baz>\d+)
                 #   setval: my-cmd {foo} bar {baz}
-                pattern = re.compile(ref[k]['getval'])
-                ref[k]['existing'] = {k:str(match.group(k)) for k in pattern.groupindex.keys()}
+                ref[k]['existing'] = {}
+                for key in match.groupdict().keys():
+                    ref[k]['existing'][key] = str(match.group(key))
             elif 'str' == kind:
                 ref[k]['existing'] = match[0]
             else:
                 raise "get_existing: unknown 'kind' value specified for key '{0}'".format(k)
-
 
     def get_playvals(self):
         """Update ref with values from the playbook.
@@ -881,9 +925,9 @@ class NxosCmdRef:
                 elif 'list' == ref[k]['kind']:
                     playval = [str(i) for i in playval]
                 elif 'dict' == ref[k]['kind']:
-                    playval = {k:str(v) for k,v in playval.iteritems()}
+                    for key, v in playval.items():
+                        playval[key] = str(v)
                 ref[k]['playval'] = playval
-
 
     def get_proposed(self):
         """Compare playbook values against existing states and create a list
@@ -902,9 +946,7 @@ class NxosCmdRef:
             existing = ref[k].get('existing', ref[k]['default'])
             if playval == existing and ref['_state'] == 'present':
                 continue
-            if isinstance(existing, dict) and not all(existing.values()):
-                # All existing sub_key values are None so it's safe to set
-                # existing to None.
+            if isinstance(existing, dict) and all(x is None for x in existing.values()):
                 existing = None
             if existing is None and ref['_state'] == 'absent':
                 continue
@@ -921,7 +963,7 @@ class NxosCmdRef:
                 #   setval: my-cmd {foo} bar {baz}
                 cmd = ref[k]['setval'].format(**playval)
             elif 'str' == kind:
-                if 'absent' in playval:
+                if 'deleted' in playval:
                     if existing:
                         cmd = 'no ' + ref[k]['setval'].format(existing)
                 else:
