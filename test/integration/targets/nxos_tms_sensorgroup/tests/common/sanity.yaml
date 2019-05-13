@@ -9,10 +9,10 @@
     identifier: 4
     data_source: 'NX-API'
     path:
-      name: foo
+      name: sys/bgp/inst/dom-default/peer-[10.10.10.11/ent-[10.10.10.11]]
       depth: 0
       query_condition: query_condition
-      filter_condition: filter_condition
+      filter_condition: 'or(eq(ethpmPhysIf.operSt,"down"),eq(ethpmPhysIf.operSt,"up"))'
 
 - name: Setup
   nxos_feature: &setup_teardown
