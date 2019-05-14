@@ -130,10 +130,11 @@ sensor_group:
 def main():
     argument_spec = dict(
         identifier=dict(required=True, type='int'),
-        destination_group=dict(required=True, type='int'),
+        destination_group=dict(required=False, type='int'),
         sensor_group=dict(required=False, type='dict'),
         state=dict(choices=['present', 'absent'], default='present', required=False),
     )
+
     argument_spec.update(nxos_argument_spec)
     module = AnsibleModule(argument_spec=argument_spec, supports_check_mode=True)
     warnings = list()

@@ -66,8 +66,6 @@
   - name: TMS defaults - absent
     nxos_tms_subscription: &tms_def
       identifier: "{{ identifier }}"
-      destination_group: "{{ destination_group }}"
-      sensor_group: "{{ sensor_group }}"
       state: absent
       provider: "{{ connection }}"
     register: result
