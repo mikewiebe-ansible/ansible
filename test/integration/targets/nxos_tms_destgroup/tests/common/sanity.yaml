@@ -45,7 +45,6 @@
   - name: TMS defaults - absent
     nxos_tms_destgroup: &tms_def
       identifier: "{{ identifier }}"
-      destination: "{{ destination }}"
       state: absent
       provider: "{{ connection }}"
     register: result
