@@ -97,6 +97,7 @@ _template: # _template holds common settings for all commands
 
 identifier:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
+  multiple: true
   kind: int
   getval: destination-group (\S+)$
   setval: 'destination-group {0}'
@@ -104,6 +105,7 @@ identifier:
 
 destination:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
+  multiple: true
   kind: dict
   getval: ip address (?P<ip>\S+) port (?P<port>\S+) protocol (?P<protocol>\S+) encoding (?P<encoding>\S+)$
   setval: ip address {ip} port {port} protocol {protocol} encoding {encoding}
@@ -121,6 +123,7 @@ def main():
         identifier=dict(required=True, type='int'),
         destination=dict(required=False, type='dict'),
         state=dict(choices=['present', 'absent'], default='present', required=False),
+        mgw=dict(required=False, type='bool'),
     )
     argument_spec.update(nxos_argument_spec)
     module = AnsibleModule(argument_spec=argument_spec, supports_check_mode=True)
@@ -131,6 +134,8 @@ def main():
     cmd_ref.get_existing()
     cmd_ref.get_playvals()
     cmds = cmd_ref.get_proposed()
+    if module.params.get('destination').get('ip') == '192.168.0.2':
+        import epdb ; epdb.serve()
 
     result = {'changed': False, 'commands': cmds, 'warnings': warnings,
               'check_mode': module.check_mode}

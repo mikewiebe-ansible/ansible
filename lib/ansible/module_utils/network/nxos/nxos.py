@@ -29,10 +29,12 @@
 
 
 import collections
+import copy
 import json
 import re
 import sys
 import yaml
+from collections import OrderedDict
 
 from ansible.module_utils._text import to_text
 from ansible.module_utils.basic import env_fallback
@@ -849,28 +851,30 @@ class NxosCmdRef:
             match = [m for m in match_lines if m]
             if not match:
                 return None
-            match = match[0]
-
+            if len(match) > 1 and not ref[k]['multiple']:
+                raise ValueError("get_existing: multiple matches found for property {0}".format(k))
         else:
             match = [m.groups() for m in match_lines if m]
             if not match:
                 return None
-            if len(match) > 1:
-                # TBD: Add support for multiple instances
-                raise "get_existing: multiple match instances are not currently supported"
-            match = list(match[0])  # tuple to list
+            if len(match) > 1 and not ref[k]['multiple']:
+                raise ValueError("get_existing: multiple matches found for property {0}".format(k))
 
-            # Handle config strings that nvgen with the 'no' prefix.
-            # Example match behavior:
-            # When pattern is: '(no )*foo *(\S+)*$' AND
-            #  When output is: 'no foo'  -> match: ['no ', None]
-            #  When output is: 'foo 50'  -> match: [None, '50']
-            if None is match[0]:
-                match.pop(0)
-            elif 'no' in match[0]:
-                match.pop(0)
-                if not match:
-                    return None
+            for item in match:
+                index = match.index(item)
+                match[index] = list(match[index])  # tuple to list
+
+                # Handle config strings that nvgen with the 'no' prefix.
+                # Example match behavior:
+                # When pattern is: '(no )*foo *(\S+)*$' AND
+                #  When output is: 'no foo'  -> match: ['no ', None]
+                #  When output is: 'foo 50'  -> match: [None, '50']
+                if None is match[index]:
+                    match.pop(index)
+                elif 'no' in match[index]:
+                    match.pop(index)
+                    if not match:
+                        return None
 
         return match
 
@@ -892,23 +896,26 @@ class NxosCmdRef:
             match = self.pattern_match_existing(output, k)
             if not match:
                 continue
-            kind = ref[k]['kind']
-            if 'int' == kind:
-                ref[k]['existing'] = int(match[0])
-            elif 'list' == kind:
-                ref[k]['existing'] = [str(i) for i in match]
-            elif 'dict' == kind:
-                # The getval pattern should contain regex named group keys that
-                # match up with the setval named placeholder keys; e.g.
-                #   getval: my-cmd (?P<foo>\d+) bar (?P<baz>\d+)
-                #   setval: my-cmd {foo} bar {baz}
-                ref[k]['existing'] = {}
-                for key in match.groupdict().keys():
-                    ref[k]['existing'][key] = str(match.group(key))
-            elif 'str' == kind:
-                ref[k]['existing'] = match[0]
-            else:
-                raise "get_existing: unknown 'kind' value specified for key '{0}'".format(k)
+            ref[k]['existing'] = {}
+            for item in match:
+                index = match.index(item)
+                kind = ref[k]['kind']
+                if 'int' == kind:
+                    ref[k]['existing'][index] = int(match[index][0])
+                elif 'list' == kind:
+                    ref[k]['existing'][index] = [str(i) for i in match[index]]
+                elif 'dict' == kind:
+                    # The getval pattern should contain regex named group keys that
+                    # match up with the setval named placeholder keys; e.g.
+                    #   getval: my-cmd (?P<foo>\d+) bar (?P<baz>\d+)
+                    #   setval: my-cmd {foo} bar {baz}
+                    ref[k]['existing'][index] = {}
+                    for key in match[index].groupdict().keys():
+                        ref[k]['existing'][index][key] = str(match[index].group(key))
+                elif 'str' == kind:
+                    ref[k]['existing'][index] = match[index][0]
+                else:
+                    raise ValueError("get_existing: unknown 'kind' value specified for key '{0}'".format(k))
 
     def get_playvals(self):
         """Update ref with values from the playbook.
@@ -929,6 +936,71 @@ class NxosCmdRef:
                         playval[key] = str(v)
                 ref[k]['playval'] = playval
 
+    def _get_proposed(self, playval, k):
+        """Helper function to get proposed commands to configure device
+        Return a list of commands
+        """
+        ref = self._ref
+        proposed = ref['_proposed']
+        cmd = None
+        kind = ref[k]['kind']
+        if 'int' == kind:
+            cmd = ref[k]['setval'].format(playval)
+        elif 'list' == kind:
+            cmd = ref[k]['setval'].format(*(playval))
+        elif 'dict' == kind:
+            # The setval pattern should contain placeholder keys that
+            # match up with the getval regex named group keys; e.g.
+            #   getval: my-cmd (?P<foo>\d+) bar (?P<baz>\d+)
+            #   setval: my-cmd {foo} bar {baz}
+            cmd = ref[k]['setval'].format(**playval)
+        elif 'str' == kind:
+            if 'deleted' in playval:
+                if existing:
+                    cmd = 'no ' + ref[k]['setval'].format(existing)
+            else:
+                cmd = ref[k]['setval'].format(playval)
+        else:
+            raise ValueError("get_proposed: unknown 'kind' value specified for key '{0}'".format(k))
+        if cmd:
+            if 'absent' == ref['_state'] and not re.search(r'^no', cmd):
+                cmd = 'no ' + cmd
+            # Add processed command to cmd_ref object
+            ref[k]['proposed_cmd'] = cmd
+
+    def _proposed_context(self):
+        """Helper function to add parent config context
+        Return a list of commands with parent context
+        """
+        ref = self._ref
+        proposed = ref['_proposed']
+        for k in ref['_playkeys']:
+            if ref[k].get('proposed_cmd') is None:
+                continue
+            parent_context = ref['_template'].get('context', [])
+            parent_context = ref[k].get('context', parent_context)
+            if isinstance(parent_context, list):
+                for ctx_cmd in parent_context:
+                    if re.search(r'setval::', ctx_cmd):
+                        parent_setval = ctx_cmd.split('::')[1]
+                        ctx_cmd = ref[parent_setval].get('proposed_cmd')
+                        if ctx_cmd is None:
+                            self._get_proposed(ref[parent_setval]['playval'], parent_setval)
+                            continue
+                    proposed.append(ctx_cmd)
+            elif isinstance(parent_context, str):
+                if re.search(r'setval::', parent_context):
+                    parent_setval = parent_context.split('::')[1]
+                    parent_context = ref[parent_setval].get('proposed_cmd')
+                    if parent_context is None:
+                        self._get_proposed(ref[parent_setval]['playval'], parent_setval)
+                        continue
+                proposed.append(parent_config)
+
+            proposed.append(ref[k]['proposed_cmd'])
+
+        return OrderedDict.fromkeys(proposed).keys()
+
     def get_proposed(self):
         """Compare playbook values against existing states and create a list
         of proposed commands.
@@ -938,68 +1010,24 @@ class NxosCmdRef:
         # '_proposed' may be empty list or contain initializations; e.g. ['feature foo']
         proposed = ref['_proposed']
         # Create a list of commands that have playbook values
-        play_keys = [k for k in ref['commands'] if 'playval' in ref[k]]
+        play_keys = ref['_playkeys'] = [k for k in ref['commands'] if 'playval' in ref[k]]
 
         # Compare against current state
         for k in play_keys:
             playval = ref[k]['playval']
-            existing = ref[k].get('existing', ref[k]['default'])
-            if playval == existing and ref['_state'] == 'present':
+            if ref[k].get('existing') is None and ref['_state'] == 'present':
+                self._get_proposed(playval, k)
+            elif ref[k].get('existing') is None and ref['_state'] == 'absent':
                 continue
-            if isinstance(existing, dict) and all(x is None for x in existing.values()):
-                existing = None
-            if existing is None and ref['_state'] == 'absent':
-                continue
-            cmd = None
-            kind = ref[k]['kind']
-            if 'int' == kind:
-                cmd = ref[k]['setval'].format(playval)
-            elif 'list' == kind:
-                cmd = ref[k]['setval'].format(*(playval))
-            elif 'dict' == kind:
-                # The setval pattern should contain placeholder keys that
-                # match up with the getval regex named group keys; e.g.
-                #   getval: my-cmd (?P<foo>\d+) bar (?P<baz>\d+)
-                #   setval: my-cmd {foo} bar {baz}
-                cmd = ref[k]['setval'].format(**playval)
-            elif 'str' == kind:
-                if 'deleted' in playval:
-                    if existing:
-                        cmd = 'no ' + ref[k]['setval'].format(existing)
-                else:
-                    cmd = ref[k]['setval'].format(playval)
             else:
-                raise "get_proposed: unknown 'kind' value specified for key '{0}'".format(k)
-            if cmd:
-                if 'absent' == ref['_state'] and not re.search(r'^no', cmd):
-                    cmd = 'no ' + cmd
-                # Add processed command to cmd_ref object
-                ref[k]['setcmd'] = cmd
+                if playval in ref[k].get('existing').values() and ref['_state'] == 'present':
+                    continue
+                if playval not in ref[k].get('existing').values() and ref['_state'] == 'absent':
+                    continue
+                self._get_proposed(playval, k)
 
         # Commands may require parent commands for proper context.
-        # Global _template context is replaced by parameter context
-        for k in play_keys:
-            if ref[k].get('setcmd') is None:
-                continue
-            parent_context = ref['_template'].get('context', [])
-            parent_context = ref[k].get('context', parent_context)
-            if isinstance(parent_context, list):
-                for ctx_cmd in parent_context:
-                    if re.search(r'setval::', ctx_cmd):
-                        ctx_cmd = ref[ctx_cmd.split('::')[1]].get('setcmd')
-                        if ctx_cmd is None:
-                            continue
-                    proposed.append(ctx_cmd)
-            elif isinstance(parent_context, str):
-                if re.search(r'setval::', parent_context):
-                    parent_context = ref[parent_context.split('::')[1]].get('setcmd')
-                    if parent_context is None:
-                        continue
-                proposed.append(parent_config)
-
-            proposed.append(ref[k]['setcmd'])
-
-        return proposed
+        return self._proposed_context()
 
 
 def is_json(cmd):

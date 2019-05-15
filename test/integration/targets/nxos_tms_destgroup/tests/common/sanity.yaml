@@ -12,6 +12,12 @@
       port: 50001
       protocol: gRPC
       encoding: GPB
+    identifier_2: 10
+    destination_2:
+      ip: 192.168.0.2
+      port: 60001
+      protocol: gRPC
+      encoding: GPB
 
 - name: Setup
   nxos_feature: &setup_teardown
@@ -22,17 +28,39 @@
 
 - block:
   - name: TMS non defaults - present
-    nxos_tms_destgroup: &tms_non_def
-      identifier: "{{ identifier }}"
-      destination: "{{ destination }}"
+    nxos_tms_destgroup:
+      identifier: "{{ item.identifier }}"
+      destination:
+        ip: "{{ item.ip}}"
+        port: "{{ item.port }}"
+        protocol: "{{ item.protocol }}"
+        encoding: "{{ item.encoding }}"
       provider: "{{ connection }}"
+    loop:
+      - { identifier: 2, ip: 192.168.0.1, port: 50001, protocol: gRPC, encoding: GPB}
+      - { identifier: 2, ip: 192.168.0.2, port: 60001, protocol: gRPC, encoding: GPB}
+      - { identifier: 10, ip: 192.168.0.1, port: 50001, protocol: gRPC, encoding: GPB}
+      - { identifier: 10, ip: 192.168.0.2, port: 60001, protocol: gRPC, encoding: GPB}
     register: result
 
   - assert: &true
       that:
-        - "result.changed == true"
+        - "{{ item.changed }} == true"
+    with_items: "{{ result.results }}"
 
-  #- meta: end_play
+  - meta: end_play
+
+  - name: TMS non defaults - present
+    nxos_tms_destgroup: &tms_non_def
+      identifier: "{{ identifier }}"
+      destination: "{{ destination }}"
+      provider: "{{ connection }}"
+      mgw: true
+    register: result
+
+  - assert:
+      that:
+        - "result.changed == true"
 
   - name: TMS non defaults - present - idempotence
     nxos_tms_destgroup: *tms_non_def
@@ -41,6 +69,24 @@
   - assert: &false
       that:
         - "result.changed == false"
+
+  - name: TMS non defaults - present - group2
+    nxos_tms_destgroup: &tms_non_def2
+      identifier: "{{ identifier_2 }}"
+      destination: "{{ destination_2 }}"
+      provider: "{{ connection }}"
+    register: result
+
+  - assert: *true
+
+  - name: TMS non defaults - present - idempotence - group2
+    nxos_tms_destgroup:
+      identifier: "{{ identifier_2 }}"
+      destination: "{{ destination_2 }}"
+      provider: "{{ connection }}"
+    register: result
+
+  - assert: *false
 
   - name: TMS defaults - absent
     nxos_tms_destgroup: &tms_def
