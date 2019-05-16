@@ -897,6 +897,8 @@ class NxosCmdRef:
             if not match:
                 continue
             ref[k]['existing'] = {}
+            if self._module.params.get('mgw') and k == 'destination':
+                import epdb ; epdb.serve()
             for item in match:
                 index = match.index(item)
                 kind = ref[k]['kind']
@@ -936,7 +938,7 @@ class NxosCmdRef:
                         playval[key] = str(v)
                 ref[k]['playval'] = playval
 
-    def _get_proposed(self, playval, k):
+    def _get_proposed(self, playval, k, return_val=False):
         """Helper function to get proposed commands to configure device
         Return a list of commands
         """
@@ -965,8 +967,13 @@ class NxosCmdRef:
         if cmd:
             if 'absent' == ref['_state'] and not re.search(r'^no', cmd):
                 cmd = 'no ' + cmd
-            # Add processed command to cmd_ref object
-            ref[k]['proposed_cmd'] = cmd
+            if return_val:
+                # This _get_proposed function can be used to simply return the
+                # proposed command but not update the ref dictionary.
+                return cmd
+            else:
+                # Add processed command to cmd_ref object
+                ref[k]['proposed_cmd'] = cmd
 
     def _proposed_context(self):
         """Helper function to add parent config context
@@ -985,16 +992,14 @@ class NxosCmdRef:
                         parent_setval = ctx_cmd.split('::')[1]
                         ctx_cmd = ref[parent_setval].get('proposed_cmd')
                         if ctx_cmd is None:
-                            self._get_proposed(ref[parent_setval]['playval'], parent_setval)
-                            continue
+                            ctx_cmd = self._get_proposed(ref[parent_setval]['playval'], parent_setval, True)
                     proposed.append(ctx_cmd)
             elif isinstance(parent_context, str):
                 if re.search(r'setval::', parent_context):
                     parent_setval = parent_context.split('::')[1]
                     parent_context = ref[parent_setval].get('proposed_cmd')
                     if parent_context is None:
-                        self._get_proposed(ref[parent_setval]['playval'], parent_setval)
-                        continue
+                        ctx_cmd = self._get_proposed(ref[parent_setval]['playval'], parent_setval, True)
                 proposed.append(parent_config)
 
             proposed.append(ref[k]['proposed_cmd'])

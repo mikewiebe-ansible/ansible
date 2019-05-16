@@ -134,7 +134,10 @@ def main():
     cmd_ref.get_existing()
     cmd_ref.get_playvals()
     cmds = cmd_ref.get_proposed()
-    if module.params.get('destination').get('ip') == '192.168.0.2':
+    from pprint import pprint
+    ref = cmd_ref._ref
+    #import epdb ; epdb.serve()
+    if module.params.get('mgw'):
         import epdb ; epdb.serve()
 
     result = {'changed': False, 'commands': cmds, 'warnings': warnings,
