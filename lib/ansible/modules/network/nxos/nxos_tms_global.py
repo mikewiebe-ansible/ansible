@@ -120,7 +120,9 @@ destination_profile_compression:
   getval: use-compression (\S+)$
   setval: 'use-compression {0}'
   default: ~
-  context: [telemetry, destination-profile]
+  context: &dpcontext
+    - telemetry
+    - destination-profile
 
 destination_profile_source_interface:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
@@ -128,7 +130,7 @@ destination_profile_source_interface:
   getval: source-interface (\S+)$
   setval: 'source-interface {0}'
   default: ~
-  context: [telemetry, destination-profile]
+  context: *dpcontext
 
 destination_profile_vrf:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
@@ -136,7 +138,7 @@ destination_profile_vrf:
   getval: use-vrf (\S+)$
   setval: 'use-vrf {0}'
   default: ~
-  context: [telemetry, destination-profile]
+  context: *dpcontext
 """
 
 
@@ -147,6 +149,7 @@ def main():
         destination_profile_vrf=dict(required=False, type='str'),
         destination_profile_source_interface=dict(required=False, type='str'),
         state=dict(choices=['present', 'absent'], default='present', required=False),
+        mgw=dict(required=False, type='bool'),
     )
     argument_spec.update(nxos_argument_spec)
     module = AnsibleModule(argument_spec=argument_spec, supports_check_mode=True)
@@ -159,6 +162,7 @@ def main():
         module.params['destination_profile_source_interface'] = normalize_interface(int)
 
     cmd_ref = NxosCmdRef(module, TMS_CMD_REF)
+    cmd_ref.set_context()
     cmd_ref.get_existing()
     cmd_ref.get_playvals()
     cmds = cmd_ref.get_proposed()

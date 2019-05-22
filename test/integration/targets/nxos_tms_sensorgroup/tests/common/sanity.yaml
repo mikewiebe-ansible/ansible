@@ -3,17 +3,6 @@
 - debug: msg="Using provider={{ connection.transport }}"
   when: ansible_connection == "local"
 
-- name: set facts common
-  # nd_* vars are "non-default" values
-  set_fact:
-    identifier: 4
-    data_source: 'NX-API'
-    path:
-      name: sys/bgp/inst/dom-default/peer-[10.10.10.11/ent-[10.10.10.11]]
-      depth: 0
-      query_condition: query_condition
-      filter_condition: 'or(eq(ethpmPhysIf.operSt,"down"),eq(ethpmPhysIf.operSt,"up"))'
-
 - name: Setup
   nxos_feature: &setup_teardown
     feature: telemetry
@@ -24,40 +13,60 @@
 - block:
   - name: TMS non defaults - present
     nxos_tms_sensorgroup: &tms_non_def
-      identifier: "{{ identifier }}"
-      data_source: "{{ data_source }}"
-      path: "{{ path }}"
+      identifier: "{{ item.identifier }}"
+      data_source: "{{ item.data_source }}"
+      path:
+        name: "{{ item.p_name }}"
+        depth: "{{ item.p_depth }}"
+        query_condition: "{{ item.p_query_condition }}"
+        filter_condition: "{{ item.p_filter_condition }}"
       provider: "{{ connection }}"
+    loop: &loop_items
+      - { identifier: 2, data_source: NX-API, p_name: foo, p_depth: 0, p_query_condition: foo, p_filter_condition: foo }
+      - { identifier: 2, data_source: NX-API, p_name: boo, p_depth: 0, p_query_condition: foo, p_filter_condition: foo }
+      - { identifier: 55, data_source: DME, p_name: roo, p_depth: 0, p_query_condition: foo, p_filter_condition: foo }
+      - { identifier: 55, data_source: DME, p_name: new, p_depth: 0, p_query_condition: foo, p_filter_condition: foo }
     register: result
 
   - assert: &true
       that:
-        - "result.changed == true"
-
-  #- meta: end_play
+        - "{{ item.changed }} == true"
+    with_items: "{{ result.results }}"
 
   - name: TMS non defaults - present - idempotence
     nxos_tms_sensorgroup: *tms_non_def
+    loop: *loop_items
     register: result
 
   - assert: &false
       that:
-        - "result.changed == false"
+        - "{{ item.changed }} == false"
+    with_items: "{{ result.results }}"
 
   - name: TMS defaults - absent
     nxos_tms_sensorgroup: &tms_def
-      identifier: "{{ identifier }}"
+      identifier: "{{ item.identifier }}"
       state: absent
       provider: "{{ connection }}"
+    loop: &loop_items_absent
+      - { identifier: 2, data_source: NX-API, p_name: foo, p_depth: 0, p_query_condition: foo, p_filter_condition: foo }
+      - { identifier: 55, data_source: DME, p_name: roo, p_depth: 0, p_query_condition: foo, p_filter_condition: foo }
     register: result
 
-  - assert: *true
+  - assert:
+      that:
+        - "{{ item.changed }} == true"
+    with_items: "{{ result.results }}"
 
   - name: TMS defaults - absent - idempotence
     nxos_tms_sensorgroup: *tms_def
+    loop: *loop_items_absent
     register: result
 
-  - assert: *false
+  - assert:
+      that:
+        - "{{ item.changed }} == false"
+    with_items: "{{ result.results }}"
 
   always:
   - name: Teardown

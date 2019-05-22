@@ -95,26 +95,17 @@ _template: # _template holds common settings for all commands
   context:
     - telemetry
 
-identifier:
-  _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
-  multiple: true
-  kind: int
-  getval: destination-group (\S+)$
-  setval: 'destination-group {0}'
-  default: ~
-
 destination:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
   multiple: true
   kind: dict
-  getval: ip address (?P<ip>\S+) port (?P<port>\S+) protocol (?P<protocol>\S+) encoding (?P<encoding>\S+)$
+  getval: ip address (?P<ip>\S+) port (?P<port>\S+) protocol (?P<protocol>\S+) encoding (?P<encoding>\S+)
   setval: ip address {ip} port {port} protocol {protocol} encoding {encoding}
   default:
     ip: ~
     port: ~
     protocol: ~
     encoding: ~
-  context: ['telemetry', 'setval::identifier']
 """
 
 
@@ -130,15 +121,12 @@ def main():
     warnings = list()
     check_args(module, warnings)
 
+    resource_key = 'destination-group {0}'.format(module.params['identifier'])
     cmd_ref = NxosCmdRef(module, TMS_CMD_REF)
+    cmd_ref.set_context([resource_key])
     cmd_ref.get_existing()
     cmd_ref.get_playvals()
     cmds = cmd_ref.get_proposed()
-    from pprint import pprint
-    ref = cmd_ref._ref
-    #import epdb ; epdb.serve()
-    if module.params.get('mgw'):
-        import epdb ; epdb.serve()
 
     result = {'changed': False, 'commands': cmds, 'warnings': warnings,
               'check_mode': module.check_mode}

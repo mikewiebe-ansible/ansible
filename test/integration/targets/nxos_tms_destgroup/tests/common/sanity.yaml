@@ -23,8 +23,8 @@
     loop: &loop_items
       - { identifier: 2, ip: 192.168.0.1, port: 50001, protocol: gRPC, encoding: GPB}
       - { identifier: 2, ip: 192.168.0.2, port: 60001, protocol: gRPC, encoding: GPB}
-      # - { identifier: 10, ip: 192.168.0.1, port: 50001, protocol: gRPC, encoding: GPB}
-      # - { identifier: 10, ip: 192.168.0.2, port: 60001, protocol: gRPC, encoding: GPB}
+      - { identifier: 10, ip: 192.168.0.1, port: 50001, protocol: gRPC, encoding: GPB}
+      - { identifier: 10, ip: 192.168.0.2, port: 60001, protocol: gRPC, encoding: GPB}
     register: result
 
   - assert: &true
@@ -50,7 +50,42 @@
         - "{{ item.changed }} == false"
     with_items: "{{ result.results }}"
 
-  - meta: end_play
+  - name: TMS non defaults - absent
+    nxos_tms_destgroup: &tms_absent
+      state: absent
+      identifier: "{{ item.identifier }}"
+      provider: "{{ connection }}"
+    loop: &loop_items_absent
+      - { identifier: 2}
+      - { identifier: 10}
+    register: result
+
+  - assert:
+      that:
+        - "{{ item.changed }} == true"
+    with_items: "{{ result.results }}"
+
+  - name: TMS non defaults - absent - itempotence check
+    nxos_tms_destgroup:
+      state: absent
+      identifier: "{{ item.identifier }}"
+      destination:
+        ip: "{{ item.ip}}"
+        port: "{{ item.port }}"
+        protocol: "{{ item.protocol }}"
+        encoding: "{{ item.encoding }}"
+      provider: "{{ connection }}"
+    loop:
+      - { identifier: 2, ip: 192.168.0.1, port: 50001, protocol: gRPC, encoding: GPB}
+      - { identifier: 2, ip: 192.168.0.2, port: 60001, protocol: gRPC, encoding: GPB}
+      - { identifier: 10, ip: 192.168.0.1, port: 50001, protocol: gRPC, encoding: GPB}
+      - { identifier: 10, ip: 192.168.0.2, port: 60001, protocol: gRPC, encoding: GPB}
+    register: result
+
+  - assert:
+      that:
+        - "{{ item.changed }} == false"
+    with_items: "{{ result.results }}"
 
   always:
   - name: Teardown

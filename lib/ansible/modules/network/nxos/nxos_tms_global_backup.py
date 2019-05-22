@@ -23,12 +23,12 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 
 DOCUMENTATION = '''
 ---
-module: nxos_tms_subscription
+module: nxos_tms_global
 extends_documentation_fragment: nxos
 version_added: "2.9"
-short_description: Telemetry Monitoring Service (TMS) subscription configuration
+short_description: Telemetry Monitoring Service (TMS) global-level configuration
 description:
-  - Manages Telemetry Monitoring Service (TMS) subscription configuration.
+  - Manages Telemetry Monitoring Service (TMS) global-level configuration.
 
 author: Mike Wiebe (@mikewiebe)
 notes:
@@ -36,38 +36,44 @@ notes:
     - Not supported on N3K/N5K/N6K/N7K
     - Module will automatically enable 'feature telemetry' if it is disabled.
 options:
-  identifier:
+  # Top-level commands
+  certificate:
     description:
-      - Subscription identifier.
-      - Value must be a int representing the subscription identifier.
-    required: true
-    type: int
-  destination_group:
-    description:
-      - Associated destination group.
-      - Value must be a int representing the associated destination group.
-    required: false
-    type: int
-  sensor_group:
-    description:
-      - Associated sensor group.
-      - Value must be a dict defining values for keys: id, sample_interval.
+      - Certificate SSL/TLS and hostname values.
+      - Value must be a dict defining values for keys: key and hostname.
     required: false
     type: dict
+  destination_profile_compression:
+    description:
+      - Destination compression method.
+    required: false
+    choices: ['gzip']
+  destination_profile_vrf:
+    description:
+      - Destination VRF.
+        Valid value is a str representing the vrf name.
+    required: false
+    type: str
+  purge:
+    description:
+      - Remove any nxos_tms_global configuration that does not match playbook
+    required: false
+    type: bool
+    default: false
   state:
     description:
-      - Maka configuration present or absent on the device.
+      - Make configuration present or absent on the device.
     required: false
     choices: ['present', 'absent']
     default: ['present']
 '''
 EXAMPLES = '''
-- nxos_tms_destgroup:
-    identifier: 5
-    destination_group: 4
-    sensor_group:
-      id: 3
-      sampe_interval: 1000
+- nxos_tms_global:
+    certificate:
+      key: /bootflash/server.key
+      hostname: localhost
+    destination_profile_compression: gzip
+    destination_profile_vrf: management
 '''
 
 RETURN = '''
@@ -75,7 +81,7 @@ cmds:
     description: commands sent to the device
     returned: always
     type: list
-    sample: ["telemetry", "subscription 5", "dst-grp 5"]
+    sample: ["telemetry", "certificate /bootflash/server.key localhost"]
 '''
 
 import re, yaml
@@ -88,8 +94,7 @@ from ansible.module_utils.network.common.config import CustomNetworkConfig
 TMS_CMD_REF = """
 # The cmd_ref is a yaml formatted list of module commands.
 # A leading underscore denotes a non-command variable; e.g. _template.
-# TBD: Use Structured
-#    TMS does not have convenient json data so this cmd_ref uses raw cli configs.
+# TMS does not have convenient json data so this cmd_ref uses raw cli configs.
 ---
 _template: # _template holds common settings for all commands
   # Enable feature telemetry if disabled
@@ -100,42 +105,47 @@ _template: # _template holds common settings for all commands
   context:
     - telemetry
 
-destination_group:
+certificate:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
-  multiple: true
-  kind: int
-  getval: dst-grp (\S+)$
-  setval: 'dst-grp {0}'
-  default: ~
-
-sensor_group:
-  _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
-  multiple: true
   kind: dict
-  getval: snsr-grp (?P<id>\S+) sample-interval (?P<sample_interval>\S+)$
-  setval: snsr-grp {id} sample-interval {sample_interval}
+  getval: certificate (?P<key>\S+) (?P<hostname>\S+)$
+  setval: certificate {key} {hostname}
   default:
-    id: ~
-    sample_interval: ~
+    key: ~
+    hostname: ~
+
+destination_profile_compression:
+  _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
+  kind: str
+  getval: use-compression (\S+)$
+  setval: 'use-compression {1}'
+  default: ~
+  context: [telemetry, destination-profile]
+
+destination_profile_vrf:
+  _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
+  kind: str
+  getval: use-vrf (\S+)$
+  setval: 'use-vrf {1}'
+  default: ~
+  context: [telemetry, destination-profile]
 """
 
 
 def main():
     argument_spec = dict(
-        identifier=dict(required=True, type='int'),
-        destination_group=dict(required=False, type='int'),
-        sensor_group=dict(required=False, type='dict'),
+        certificate=dict(required=False, type='dict'),
+        destination_profile_compression=dict(required=False, type='str', choices=['gzip']),
+        destination_profile_vrf=dict(required=False, type='str'),
+        purge=dict(default=False, type='bool'),
         state=dict(choices=['present', 'absent'], default='present', required=False),
     )
-
     argument_spec.update(nxos_argument_spec)
     module = AnsibleModule(argument_spec=argument_spec, supports_check_mode=True)
     warnings = list()
     check_args(module, warnings)
 
-    resource_key = 'subscription {0}'.format(module.params['identifier'])
     cmd_ref = NxosCmdRef(module, TMS_CMD_REF)
-    cmd_ref.set_context([resource_key])
     cmd_ref.get_existing()
     cmd_ref.get_playvals()
     cmds = cmd_ref.get_proposed()

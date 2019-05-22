@@ -102,23 +102,16 @@ _template: # _template holds common settings for all commands
   context:
     - telemetry
 
-identifier:
-  _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
-  kind: int
-  getval: sensor-group (\S+)$
-  setval: 'sensor-group {0}'
-  default: ~
-
 data_source:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
   kind: str
   getval: data-source (\S+)$
   setval: 'data-source {0}'
   default: ~
-  context: ['telemetry', 'setval::identifier']
 
 path:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
+  multiple: true
   kind: dict
   getval: path (?P<name>\S+) depth (?P<depth>\S+) query-condition (?P<query_condition>\S+) filter-condition (?P<filter_condition>\S+)$
   setval: path {name} depth {depth} query-condition {query_condition} filter-condition {filter_condition}
@@ -127,7 +120,6 @@ path:
     depth: ~
     query_condition: ~
     filter_condition: ~
-  context: ['telemetry', 'setval::identifier']
 """
 
 
@@ -143,7 +135,9 @@ def main():
     warnings = list()
     check_args(module, warnings)
 
+    resource_key = 'sensor-group {0}'.format(module.params['identifier'])
     cmd_ref = NxosCmdRef(module, TMS_CMD_REF)
+    cmd_ref.set_context([resource_key])
     cmd_ref.get_existing()
     cmd_ref.get_playvals()
     cmds = cmd_ref.get_proposed()

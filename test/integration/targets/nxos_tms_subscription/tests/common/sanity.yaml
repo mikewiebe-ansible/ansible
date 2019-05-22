@@ -3,15 +3,6 @@
 - debug: msg="Using provider={{ connection.transport }}"
   when: ansible_connection == "local"
 
-- name: set facts common
-  # nd_* vars are "non-default" values
-  set_fact:
-    identifier: 4
-    destination_group: 5
-    sensor_group:
-      id: 6
-      sample_interval: 1000
-
 - name: Setup
   nxos_feature: &setup_teardown
     feature: telemetry
@@ -19,44 +10,60 @@
     state: disabled
   ignore_errors: yes
 
-- name: Configure supporting destgroup
+- name: Configure supporting destgroups
   nxos_tms_destgroup:
-    identifier: 5
+    identifier: "{{ item.identifier }}"
     destination:
-      ip: 192.168.0.1
-      port: 50001
-      protocol: gRPC
-      encoding: GPB
+      ip: "{{ item.ip}}"
+      port: "{{ item.port }}"
+      protocol: "{{ item.protocol }}"
+      encoding: "{{ item.encoding }}"
     provider: "{{ connection }}"
+  loop:
+    - { identifier: 2, ip: 192.168.0.1, port: 50001, protocol: gRPC, encoding: GPB}
+    - { identifier: 2, ip: 192.168.0.2, port: 60001, protocol: gRPC, encoding: GPB}
+    - { identifier: 10, ip: 192.168.0.1, port: 50001, protocol: gRPC, encoding: GPB}
+    - { identifier: 10, ip: 192.168.0.2, port: 60001, protocol: gRPC, encoding: GPB}
 
-- name: Configure supporting sensorgroup
+- name: Configure supporting sensorgroups
   nxos_tms_sensorgroup:
-    identifier: 6
-    data_source: "NX-API"
+    identifier: "{{ item.identifier }}"
+    data_source: "{{ item.data_source }}"
     path:
-      name: foo
-      depth: 0
-      query_condition: query_condition
-      filter_condition: filter_condition
+      name: "{{ item.p_name }}"
+      depth: "{{ item.p_depth }}"
+      query_condition: "{{ item.p_query_condition }}"
+      filter_condition: "{{ item.p_filter_condition }}"
     provider: "{{ connection }}"
+  loop:
+    - { identifier: 2, data_source: NX-API, p_name: foo, p_depth: 0, p_query_condition: foo, p_filter_condition: foo }
+    - { identifier: 2, data_source: NX-API, p_name: boo, p_depth: 0, p_query_condition: foo, p_filter_condition: foo }
+    - { identifier: 55, data_source: DME, p_name: roo, p_depth: 0, p_query_condition: foo, p_filter_condition: foo }
+    - { identifier: 55, data_source: DME, p_name: new, p_depth: 0, p_query_condition: foo, p_filter_condition: foo }
 
 - block:
   - name: TMS non defaults - present
     nxos_tms_subscription: &tms_non_def
-      identifier: "{{ identifier }}"
-      destination_group: "{{ destination_group }}"
-      sensor_group: "{{ sensor_group }}"
+      identifier: "{{ item.identifier }}"
+      destination_group: "{{ item.destination_group }}"
+      sensor_group:
+        id: "{{ item.sensor_id }}"
+        sample_interval: "{{ item.sensor_interval }}"
       provider: "{{ connection }}"
+    loop: &loop_items
+      - { identifier: 4, destination_group: 2, sensor_id: 2, sensor_interval: 1000 }
+      - { identifier: 5, destination_group: 2, sensor_id: 2, sensor_interval: 1000 }
+      - { identifier: 6, destination_group: 10, sensor_id: 55, sensor_interval: 3000 }
+      - { identifier: 7, destination_group: 10, sensor_id: 2, sensor_interval: 1000 }
     register: result
 
   - assert: &true
       that:
         - "result.changed == true"
 
-  #- meta: end_play
-
   - name: TMS non defaults - present - idempotence
     nxos_tms_subscription: *tms_non_def
+    loop: *loop_items
     register: result
 
   - assert: &false
@@ -65,18 +72,28 @@
 
   - name: TMS defaults - absent
     nxos_tms_subscription: &tms_def
-      identifier: "{{ identifier }}"
+      identifier: "{{ item.identifier }}"
       state: absent
       provider: "{{ connection }}"
+    loop: &loop_items_absent
+      - { identifier: 4 }
+      - { identifier: 5 }
+      - { identifier: 6 }
+      - { identifier: 7 }
     register: result
 
-  - assert: *true
+  - assert:
+      that:
+        - "result.changed == true"
 
   - name: TMS defaults - absent - idempotence
     nxos_tms_subscription: *tms_def
+    loop: *loop_items_absent
     register: result
 
-  - assert: *false
+  - assert:
+      that:
+        - "result.changed == false"
 
   always:
   - name: Teardown
