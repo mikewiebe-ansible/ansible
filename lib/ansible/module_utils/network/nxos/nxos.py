@@ -860,32 +860,33 @@ class NxosCmdRef:
         """
         ref = self._ref
         pattern = re.compile(ref[k]['getval'])
+        multiple = 'multiple' in ref[k].keys()
         match_lines = [re.search(pattern, line) for line in output]
         if 'dict' == ref[k]['kind']:
             match = [m for m in match_lines if m]
             if not match:
                 return None
-            if len(match) > 1 and not ref[k]['multiple']:
+            if len(match) > 1 and not multiple:
                 raise ValueError("get_existing: multiple matches found for property {0}".format(k))
         else:
             match = [m.groups() for m in match_lines if m]
             if not match:
                 return None
-            if len(match) > 1 and not ref[k]['multiple']:
+            if len(match) > 1 and not multiple:
                 raise ValueError("get_existing: multiple matches found for property {0}".format(k))
             for item in match:
                 index = match.index(item)
-                match = list(match[index])  # tuple to list
+                match[index] = list(item)  # tuple to list
 
                 # Handle config strings that nvgen with the 'no' prefix.
                 # Example match behavior:
                 # When pattern is: '(no )*foo *(\S+)*$' AND
                 #  When output is: 'no foo'  -> match: ['no ', None]
                 #  When output is: 'foo 50'  -> match: [None, '50']
-                if None is match[index]:
-                    match.pop(index)
-                elif 'no' in match[index]:
-                    match.pop(index)
+                if None is match[index][0]:
+                    match[index].pop(0)
+                elif 'no' in match[index][0]:
+                    match[index].pop(0)
                     if not match:
                         return None
 
@@ -941,19 +942,19 @@ class NxosCmdRef:
                 index = match.index(item)
                 kind = ref[k]['kind']
                 if 'int' == kind:
-                    ref[k]['existing'][index] = int(match[index])
+                    ref[k]['existing'][index] = int(item[0])
                 elif 'list' == kind:
-                    ref[k]['existing'][index] = [str(i) for i in match]
+                    ref[k]['existing'][index] = [str(i) for i in item[0]]
                 elif 'dict' == kind:
                     # The getval pattern should contain regex named group keys that
                     # match up with the setval named placeholder keys; e.g.
                     #   getval: my-cmd (?P<foo>\d+) bar (?P<baz>\d+)
                     #   setval: my-cmd {foo} bar {baz}
                     ref[k]['existing'][index] = {}
-                    for key in match[index].groupdict().keys():
-                        ref[k]['existing'][index][key] = str(match[index].group(key))
+                    for key in item.groupdict().keys():
+                        ref[k]['existing'][index][key] = str(item.group(key))
                 elif 'str' == kind:
-                    ref[k]['existing'][index] = match[index]
+                    ref[k]['existing'][index] = item[0]
                 else:
                     raise ValueError("get_existing: unknown 'kind' value specified for key '{0}'".format(k))
 
@@ -976,8 +977,8 @@ class NxosCmdRef:
                         playval[key] = str(v)
                 ref[k]['playval'] = playval
 
-    def _get_proposed(self, playval, existing, k):
-        """Helper function to get proposed commands to configure device
+    def build_cmd_set(self, playval, existing, k):
+        """Helper function to create list of commands to configure device
         Return a list of commands
         """
         ref = self._ref
@@ -1020,14 +1021,14 @@ class NxosCmdRef:
         # '_proposed' may be empty list or contain initializations; e.g. ['feature foo']
         proposed = ref['_proposed']
 
-        if 'absent' in ref['_state'] and ref['_context'] and ref['_context'][-1].startswith('no'):
+        if ref['_context'] and ref['_context'][-1].startswith('no'):
             [proposed.append(ctx) for ctx in ref['_context']]
             return proposed
 
         # Create a list of commands that have playbook values
-        play_keys = ref['_playkeys'] = [k for k in ref['commands'] if 'playval' in ref[k]]
+        play_keys = [k for k in ref['commands'] if 'playval' in ref[k]]
 
-        def have_equal_want(playval, existing):
+        def compare(playval, existing):
             if 'present' in ref['_state']:
                 if existing is None:
                     return False
@@ -1045,27 +1046,28 @@ class NxosCmdRef:
         for k in play_keys:
             playval = ref[k]['playval']
             existing = ref[k].get('existing', ref[k]['default'])
+            multiple = 'multiple' in ref[k].keys()
 
             # Multiple Instances:
-            if isinstance(existing, dict) and ref[k].get('multiple'):
+            if isinstance(existing, dict) and multiple:
                 item_found = False
                 for dkey, dvalue in existing.items():
-                    if have_equal_want(playval, dvalue):
+                    if compare(playval, dvalue):
                         item_found = True
                 if item_found:
                     continue
             # Single Instance:
             else:
-                if have_equal_want(playval, existing):
+                if compare(playval, existing):
                     continue
 
             # Multiple Instances:
             if isinstance(existing, dict):
                 for dkey, dvalue in existing.items():
-                    self._get_proposed(playval, dvalue, k)
+                    self.build_cmd_set(playval, dvalue, k)
             # Single Instance:
             else:
-                self._get_proposed(playval, existing, k)
+                self.build_cmd_set(playval, existing, k)
 
         # Remove any duplicate commands before returning.
         return OrderedDict.fromkeys(proposed).keys()
