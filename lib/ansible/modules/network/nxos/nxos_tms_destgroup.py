@@ -114,7 +114,6 @@ def main():
         identifier=dict(required=True, type='int'),
         destination=dict(required=False, type='dict'),
         state=dict(choices=['present', 'absent'], default='present', required=False),
-        mgw=dict(required=False, type='bool'),
     )
     argument_spec.update(nxos_argument_spec)
     module = AnsibleModule(argument_spec=argument_spec, supports_check_mode=True)

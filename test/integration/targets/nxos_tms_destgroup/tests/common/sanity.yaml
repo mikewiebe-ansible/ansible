@@ -41,7 +41,6 @@
         protocol: "{{ item.protocol }}"
         encoding: "{{ item.encoding }}"
       provider: "{{ connection }}"
-      mgw: true
     loop: *loop_items
     register: result
 

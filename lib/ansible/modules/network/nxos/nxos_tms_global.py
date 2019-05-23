@@ -149,7 +149,6 @@ def main():
         destination_profile_vrf=dict(required=False, type='str'),
         destination_profile_source_interface=dict(required=False, type='str'),
         state=dict(choices=['present', 'absent'], default='present', required=False),
-        mgw=dict(required=False, type='bool'),
     )
     argument_spec.update(nxos_argument_spec)
     module = AnsibleModule(argument_spec=argument_spec, supports_check_mode=True)

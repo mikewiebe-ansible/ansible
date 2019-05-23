@@ -28,7 +28,6 @@
       destination_profile_source_interface: "{{ destination_profile_source_interface }}"
       destination_profile_vrf: "{{ destination_profile_vrf }}"
       provider: "{{ connection }}"
-      mgw: true
     register: result
 
   - assert: &true
@@ -50,7 +49,6 @@
       destination_profile_source_interface: "{{ destination_profile_source_interface }}"
       destination_profile_vrf: "{{ destination_profile_vrf }}"
       state: absent
-      mgw: true
       provider: "{{ connection }}"
     register: result
 
