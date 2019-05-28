@@ -109,6 +109,24 @@ destination:
 """
 
 
+def normalize_data(cmd_ref):
+    ''' Normalize playbook values and get_exisiting data '''
+
+    if cmd_ref._ref.get('destination').get('playval'):
+        protocol = cmd_ref._ref['destination']['playval']['protocol'].lower()
+        encoding = cmd_ref._ref['destination']['playval']['encoding'].lower()
+        cmd_ref._ref['destination']['playval']['protocol'] = protocol
+        cmd_ref._ref['destination']['playval']['encoding'] = encoding
+    if cmd_ref._ref.get('destination').get('existing'):
+        for key in cmd_ref._ref['destination']['existing'].keys():
+            protocol = cmd_ref._ref['destination']['existing'][key]['protocol'].lower()
+            encoding = cmd_ref._ref['destination']['existing'][key]['encoding'].lower()
+            cmd_ref._ref['destination']['existing'][key]['protocol'] = protocol
+            cmd_ref._ref['destination']['existing'][key]['encoding'] = encoding
+
+    return cmd_ref
+
+
 def main():
     argument_spec = dict(
         identifier=dict(required=True, type='int'),
@@ -147,6 +165,7 @@ def main():
     cmd_ref.set_context([resource_key])
     cmd_ref.get_existing()
     cmd_ref.get_playvals()
+    cmd_ref = normalize_data(cmd_ref)
     cmds = cmd_ref.get_proposed()
 
     result = {'changed': False, 'commands': cmds, 'warnings': warnings,
