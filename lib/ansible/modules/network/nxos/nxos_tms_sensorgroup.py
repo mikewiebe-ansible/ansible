@@ -47,11 +47,13 @@ options:
       - Telemetry data source.
       - Valid value is a str representing the data source.
     required: false
-    choices: ['NX-API', 'DME']
+    choices: ['NX-API', 'DME', 'YANG']
   path:
     description:
       - Telemetry sensor path.
       - Value must be a dict defining values for keys: name, depth, filter_condition, query_condition.
+      - Mandatory Keys: name
+      - Optional Keys: depth, filter_condition, query_condition
     required: false
     type: dict
   state:
@@ -113,7 +115,7 @@ path:
   _exclude: ['N3K', 'N5K', 'N6k', 'N7k']
   multiple: true
   kind: dict
-  getval: path (?P<name>\S+) depth (?P<depth>\S+) query-condition (?P<query_condition>\S+) filter-condition (?P<filter_condition>\S+)$
+  getval: path (?P<name>\S+)( depth (?P<depth>\S+))?( query-condition (?P<query_condition>\S+))?( filter-condition (?P<filter_condition>\S+))?$
   setval: path {name} depth {depth} query-condition {query_condition} filter-condition {filter_condition}
   default:
     name: ~
@@ -123,31 +125,77 @@ path:
 """
 
 
+def validate_playvals(module):
+    ''' Verify options passed in from the playbook
+    '''
+    identifier = module.params.get('identifier')
+    data_source = module.params.get('data_source')
+    path = module.params.get('path')
+
+    # Verify Mandatory Playbook Args
+    if identifier is None:
+        module.fail_json(msg='parameter: identifier is required')
+    if path and 'name' not in path.keys():
+        module.fail_json(msg='parameter: path requires name: key')
+
+
+def get_setval_path(module):
+    ''' Build setval for path parameter based on playbook inputs
+        Full Command:
+          - path {name} depth {depth} query-condition {query_condition} filter-condition {filter_condition}
+        Required:
+          - path {name}
+        Optional:
+          - depth {depth}
+          - query-condition {query_condition},
+          - filter-condition {filter_condition}
+    '''
+    path = module.params.get('path')
+    if path is None:
+        return path
+
+    setval = 'path {name}'
+    if 'depth' in path.keys():
+        setval = setval + ' depth {depth}'
+    if 'query_condition' in path.keys():
+        setval = setval + ' query-condition {query_condition}'
+    if 'filter_condition' in path.keys():
+        setval = setval + ' filter-condition {filter_condition}'
+
+    return setval
+
+
 def main():
     argument_spec = dict(
-        identifier=dict(required=True, type='int'),
-        data_source=dict(choices=['NX-API', 'DME'], required=False),
+        identifier=dict(required=False, type='int'),
+        data_source=dict(choices=['DME', 'NATIVE', 'NX-API', 'YANG'], required=False),
         path=dict(required=False, type='dict'),
         state=dict(choices=['present', 'absent'], default='present', required=False),
     )
     argument_spec.update(nxos_argument_spec)
     module = AnsibleModule(argument_spec=argument_spec, supports_check_mode=True)
+    validate_playvals(module)
+
     warnings = list()
     check_args(module, warnings)
 
     resource_key = 'sensor-group {0}'.format(module.params['identifier'])
     cmd_ref = NxosCmdRef(module, TMS_CMD_REF)
     cmd_ref.set_context([resource_key])
+    if get_setval_path(module):
+        cmd_ref._ref['path']['setval'] = get_setval_path(module)
     cmd_ref.get_existing()
     cmd_ref.get_playvals()
     cmds = cmd_ref.get_proposed()
 
     result = {'changed': False, 'commands': cmds, 'warnings': warnings,
               'check_mode': module.check_mode}
+
     if cmds:
         result['changed'] = True
         if not module.check_mode:
             load_config(module, cmds)
+    # import pdb; pdb.set_trace()
 
     module.exit_json(**result)
 

@@ -723,7 +723,7 @@ class NxosCmdRef:
         ref['commands'] = sorted([k for k in ref if not k.startswith('_')])
         ref['_proposed'] = []
         ref['_context'] = []
-        ref['_resource_key'] = ''
+        ref['_resource_key'] = None
         ref['_state'] = module.params.get('state', 'present')
         self.feature_enable()
         self.get_platform_defaults()
@@ -924,7 +924,7 @@ class NxosCmdRef:
 
         # We need to remove the last item in context for state absent case.
         if 'absent' in ref['_state'] and ref['_context']:
-            if ref['_resource_key'] == ref['_context'][-1]:
+            if ref['_resource_key'] and ref['_resource_key'] == ref['_context'][-1]:
                 if ref['_context'][-1] in output:
                     ref['_context'][-1] = 'no ' + ref['_context'][-1]
                 else:
@@ -1052,6 +1052,9 @@ class NxosCmdRef:
             if isinstance(existing, dict) and multiple:
                 item_found = False
                 for dkey, dvalue in existing.items():
+                    if isinstance(dvalue, dict):
+                        # Remove values set to string 'None' from dvalue
+                        dvalue = {k: v for k, v in dvalue.items() if v != 'None'}
                     if compare(playval, dvalue):
                         item_found = True
                 if item_found:

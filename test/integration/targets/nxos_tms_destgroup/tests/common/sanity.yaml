@@ -20,6 +20,9 @@
         protocol: "{{ item.protocol }}"
         encoding: "{{ item.encoding }}"
       provider: "{{ connection }}"
+      # aggregate:
+      #   - { identifier: 2,  destination: {ip: 192.168.0.2, port: 60001, protocol: gRPC, encoding: GPB}}
+      #   - { identifier: 10, destination: {ip: 192.168.0.1, port: 50001, protocol: gRPC, encoding: GPB}}
     loop: &loop_items
       - { identifier: 2, ip: 192.168.0.1, port: 50001, protocol: gRPC, encoding: GPB}
       - { identifier: 2, ip: 192.168.0.2, port: 60001, protocol: gRPC, encoding: GPB}

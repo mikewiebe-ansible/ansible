@@ -22,10 +22,10 @@
         filter_condition: "{{ item.p_filter_condition }}"
       provider: "{{ connection }}"
     loop: &loop_items
-      - { identifier: 2, data_source: NX-API, p_name: foo, p_depth: 0, p_query_condition: foo, p_filter_condition: foo }
-      - { identifier: 2, data_source: NX-API, p_name: boo, p_depth: 0, p_query_condition: foo, p_filter_condition: foo }
-      - { identifier: 55, data_source: DME, p_name: roo, p_depth: 0, p_query_condition: foo, p_filter_condition: foo }
-      - { identifier: 55, data_source: DME, p_name: new, p_depth: 0, p_query_condition: foo, p_filter_condition: foo }
+      - { identifier: 2, data_source: NX-API, p_name: sys/bgp, p_depth: 0, p_query_condition: foo, p_filter_condition: foo }
+      - { identifier: 2, data_source: NX-API, p_name: sys/bgp/inst, p_depth: unbounded, p_query_condition: foo, p_filter_condition: foo}
+      - { identifier: 55, data_source: DME, p_name: 'sys/bgp/inst/dom-default/peer-[10.10.10.11]/ent-[10.10.10.11]', p_depth: 0, p_query_condition: foo, p_filter_condition: foo}
+      - { identifier: 55, data_source: DME, p_name: sys/ospf, p_depth: 0, p_query_condition: foo, p_filter_condition: 'or(eq(ethpmPhysIf.operSt,"down"),eq(ethpmPhysIf.operSt,"up"))' }
     register: result
 
   - assert: &true
@@ -42,6 +42,29 @@
       that:
         - "{{ item.changed }} == false"
     with_items: "{{ result.results }}"
+
+  - name: TMS change property
+    nxos_tms_sensorgroup: &tms_change
+      identifier: 2
+      data_source: DME
+      path:
+        name: sys/ospf
+        depth: unbounded
+        filter_condition: 'or(eq(ethpmPhysIf.operSt,"down")'
+      provider: "{{ connection }}"
+    register: result
+
+  - assert:
+      that:
+        - "result.changed == true"
+
+  - name: TMS change property - idempotence
+    nxos_tms_sensorgroup: *tms_change
+    register: result
+
+  - assert:
+      that:
+        - "result.changed == false"
 
   - name: TMS defaults - absent
     nxos_tms_sensorgroup: &tms_def

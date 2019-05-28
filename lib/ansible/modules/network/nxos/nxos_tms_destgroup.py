@@ -113,10 +113,32 @@ def main():
     argument_spec = dict(
         identifier=dict(required=True, type='int'),
         destination=dict(required=False, type='dict'),
+        # aggregate=dict(required=False, type='list'),
         state=dict(choices=['present', 'absent'], default='present', required=False),
     )
     argument_spec.update(nxos_argument_spec)
     module = AnsibleModule(argument_spec=argument_spec, supports_check_mode=True)
+
+    # if module.params.get('aggregate'):
+    #     cmd_ref_objects = []
+    #     aggregate = module.params.get('aggregate')
+    #     for item in aggregate:
+    #         for k, v in item.items():
+    #             if 'identifier' in k:
+    #                 module.params['identifier'] = v
+    #             if 'destination' in k:
+    #                 for k, v in v.items():
+    #                     if 'ip' in k:
+    #                         module.params['destination']['ip'] = v
+    #                     if 'port' in k:
+    #                         module.params['destination']['port'] = v
+    #                     if 'protocol' in k:
+    #                         module.params['destination']['protocol'] = v
+    #                     if 'encoding' in k:
+    #                         module.params['destination']['encoding'] = v
+    #         resource_key = 'destination-group {0}'.format(module.params['identifier'])
+    #         cmd_ref_objects.append(NxosCmdRef(module, TMS_CMD_REF))
+
     warnings = list()
     check_args(module, warnings)
 
