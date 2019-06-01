@@ -43,7 +43,7 @@
         - "{{ item.changed }} == false"
     with_items: "{{ result.results }}"
 
-  - name: TMS change property
+  - name: TMS change sensorgroup
     nxos_tms_sensorgroup: &tms_change
       identifier: 2
       data_source: DME
@@ -60,6 +60,28 @@
 
   - name: TMS change property - idempotence
     nxos_tms_sensorgroup: *tms_change
+    register: result
+
+  - assert:
+      that:
+        - "result.changed == false"
+
+  - name: Optional parameters - no filter or query condition
+    nxos_tms_sensorgroup: &optional_params
+      identifier: 75
+      data_source: DME
+      path:
+        name: sys/ospf
+        depth: 0
+      provider: "{{ connection }}"
+    register: result
+
+  - assert:
+      that:
+        - "result.changed == true"
+
+  - name: Optional parameters - no filter or query condition - idempotence
+    nxos_tms_sensorgroup: *optional_params
     register: result
 
   - assert:
