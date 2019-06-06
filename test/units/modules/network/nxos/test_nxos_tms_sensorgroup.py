@@ -29,6 +29,8 @@ from .nxos_module import TestNxosModule, load_fixture, set_module_args
 import pytest
 from ansible.module_utils.network.nxos.nxos import nxosCmdRef_import_check
 msg = nxosCmdRef_import_check()
+
+
 @pytest.mark.skipif(len(msg), reason=msg)
 class TestNxosTmsSensorgroupModule(TestNxosModule):
 
@@ -58,7 +60,6 @@ class TestNxosTmsSensorgroupModule(TestNxosModule):
     def test_tms_sensorgroup_present_n9k(self):
         # Assumes feature telemetry is enabled
         # TMS sensorgroup config is not present.
-        module_name = self.module.__name__.rsplit('.', 1)[1]
         self.execute_show_command.return_value = None
         set_module_args(dict(
             identifier='77',
@@ -77,7 +78,6 @@ class TestNxosTmsSensorgroupModule(TestNxosModule):
         # Assumes feature telemetry is enabled
         # TMS sensorgroup config is not present.
         # Only path key name provided
-        module_name = self.module.__name__.rsplit('.', 1)[1]
         self.execute_show_command.return_value = None
         set_module_args(dict(
             identifier='77',
@@ -96,7 +96,6 @@ class TestNxosTmsSensorgroupModule(TestNxosModule):
         # Assumes feature telemetry is enabled
         # TMS sensorgroup config is not present.
         # Only path keys name and depth provided
-        module_name = self.module.__name__.rsplit('.', 1)[1]
         self.execute_show_command.return_value = None
         set_module_args(dict(
             identifier='77',
@@ -115,7 +114,6 @@ class TestNxosTmsSensorgroupModule(TestNxosModule):
         # Assumes feature telemetry is enabled
         # TMS sensorgroup config is not present.
         # Only path keys name, depth and query_condition provided
-        module_name = self.module.__name__.rsplit('.', 1)[1]
         self.execute_show_command.return_value = None
         set_module_args(dict(
             identifier='77',
@@ -134,7 +132,6 @@ class TestNxosTmsSensorgroupModule(TestNxosModule):
         # Assumes feature telemetry is enabled
         # TMS sensorgroup config is not present.
         # Only path keys name, depth and filter_condition provided
-        module_name = self.module.__name__.rsplit('.', 1)[1]
         self.execute_show_command.return_value = None
         set_module_args(dict(
             identifier='77',
@@ -153,7 +150,6 @@ class TestNxosTmsSensorgroupModule(TestNxosModule):
         # Assumes feature telemetry is enabled
         # TMS sensorgroup config is not present.
         # Only path keys name, depth and filter_condition provided
-        module_name = self.module.__name__.rsplit('.', 1)[1]
         self.execute_show_command.return_value = None
         set_module_args(dict(
             identifier='77',
@@ -172,7 +168,6 @@ class TestNxosTmsSensorgroupModule(TestNxosModule):
         # Assumes feature telemetry is enabled
         # TMS sensorgroup config is not present.
         # Only path keys name, depth and filter_condition provided
-        module_name = self.module.__name__.rsplit('.', 1)[1]
         self.execute_show_command.return_value = None
         set_module_args(dict(
             identifier='77',
@@ -191,7 +186,6 @@ class TestNxosTmsSensorgroupModule(TestNxosModule):
         # Assumes feature telemetry is enabled
         # TMS sensorgroup config is not present.
         # Only path keys name, depth and filter_condition provided
-        module_name = self.module.__name__.rsplit('.', 1)[1]
         self.execute_show_command.return_value = None
         set_module_args(dict(
             identifier='77',
@@ -210,8 +204,7 @@ class TestNxosTmsSensorgroupModule(TestNxosModule):
         # Assumes feature telemetry is enabled
         # TMS sensorgroup config is not present.
         # Only path keys name, depth and filter_condition provided
-        module_name = self.module.__name__.rsplit('.', 1)[1]
-        self.execute_show_command.return_value = load_fixture(module_name, 'N9K.cfg')
+        self.execute_show_command.return_value = load_fixture('nxos_tms', 'N9K.cfg')
         set_module_args(dict(
             identifier='56',
             path={'name': 'vxlan'}
@@ -221,8 +214,7 @@ class TestNxosTmsSensorgroupModule(TestNxosModule):
     def test_tms_sensorgroup_idempotent_n9k(self):
         # Assumes feature telemetry is enabled
         # TMS sensorgroup config is present.
-        module_name = self.module.__name__.rsplit('.', 1)[1]
-        self.execute_show_command.return_value = load_fixture(module_name, 'N9K.cfg')
+        self.execute_show_command.return_value = load_fixture('nxos_tms', 'N9K.cfg')
         set_module_args(dict(
             identifier='2',
             data_source='DME',
@@ -233,8 +225,7 @@ class TestNxosTmsSensorgroupModule(TestNxosModule):
     def test_tms_sensorgroup_idempotent_variable1_n9k(self):
         # Assumes feature telemetry is enabled
         # TMS sensorgroup config is present with path key name.
-        module_name = self.module.__name__.rsplit('.', 1)[1]
-        self.execute_show_command.return_value = load_fixture(module_name, 'N9K.cfg')
+        self.execute_show_command.return_value = load_fixture('nxos_tms', 'N9K.cfg')
         set_module_args(dict(
             identifier='2',
             data_source='DME',
@@ -245,8 +236,7 @@ class TestNxosTmsSensorgroupModule(TestNxosModule):
     def test_tms_sensorgroup_idempotent_variable2_n9k(self):
         # Assumes feature telemetry is enabled
         # TMS sensorgroup config is present with path key name and depth.
-        module_name = self.module.__name__.rsplit('.', 1)[1]
-        self.execute_show_command.return_value = load_fixture(module_name, 'N9K.cfg')
+        self.execute_show_command.return_value = load_fixture('nxos_tms', 'N9K.cfg')
         set_module_args(dict(
             identifier='2',
             data_source='DME',
@@ -258,24 +248,28 @@ class TestNxosTmsSensorgroupModule(TestNxosModule):
         # Assumes feature telemetry is enabled
         # TMS sensorgroup config is present.
         # Make absent with all playbook keys provided
-        module_name = self.module.__name__.rsplit('.', 1)[1]
-        self.execute_show_command.return_value = load_fixture(module_name, 'N9K.cfg')
+        self.execute_show_command.return_value = load_fixture('nxos_tms', 'N9K.cfg')
         set_module_args(dict(
             state='absent',
             identifier='2',
             data_source='DME',
             path={'name': 'sys/ospf', 'depth': 0, 'query_condition': 'qc', 'filter_condition': 'fc'}
         ))
-        self.execute_module(changed=True)
+        self.execute_module(changed=True, commands=[
+            'telemetry',
+            'no sensor-group 2'
+        ])
 
     def test_tms_sensorgroup_absent2_n9k(self):
         # Assumes feature telemetry is enabled
         # TMS sensorgroup config is present.
         # Make absent with only identifier playbook keys provided
-        module_name = self.module.__name__.rsplit('.', 1)[1]
-        self.execute_show_command.return_value = load_fixture(module_name, 'N9K.cfg')
+        self.execute_show_command.return_value = load_fixture('nxos_tms', 'N9K.cfg')
         set_module_args(dict(
             state='absent',
             identifier='2',
         ))
-        self.execute_module(changed=True)
+        self.execute_module(changed=True, commands=[
+            'telemetry',
+            'no sensor-group 2'
+        ])

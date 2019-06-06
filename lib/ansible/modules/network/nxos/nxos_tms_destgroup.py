@@ -83,8 +83,7 @@ from ansible.module_utils.network.common.config import CustomNetworkConfig
 TMS_CMD_REF = """
 # The cmd_ref is a yaml formatted list of module commands.
 # A leading underscore denotes a non-command variable; e.g. _template.
-# TBD: Use Structured
-#    TMS does not have convenient json data so this cmd_ref uses raw cli configs.
+# TBD: Use Structured Where Possible
 ---
 _template: # _template holds common settings for all commands
   # Enable feature telemetry if disabled

@@ -66,12 +66,28 @@ options:
 EXAMPLES = '''
 - nxos_tms_sensorgroup:
     identifier: 2
-    data_source: nxapi
+    data_source: DME
     path:
       name: 'sys/bgp/inst/dom-default/peer-[10.10.10.11/ent-[10.10.10.11]]'
       depth: 0
-      filter_condition: 'or(eq(ethpmPhysIf.operSt,"down"),eq(ethpmPhysIf.operSt,"up"))'
-      query_condition: query_condition
+
+- nxos_tms_sensorgroup:
+    identifier: 55
+    data_source: DME
+    path:
+      name: 'sys/ch'
+      depth: unbounded
+      filter_condition: 'ne(eqptFt.operSt,"ok")'
+
+- nxos_tms_sensorgroup:
+    identifier: 1
+    data_source: "{{ item.source }}"
+    path:
+      name: "{{ item.path }}"
+      depth: "{{ item.depth }}"
+  with_items:
+    - { source: NX-API, path: '"show lldp neighbors detail"', depth: 0 }
+    - { source: NX-API, path: '"show system resources"', depth: 0 }
 '''
 
 RETURN = '''
@@ -79,7 +95,7 @@ cmds:
     description: commands sent to the device
     returned: always
     type: list
-    sample: ["telemetry", "sensor-group 4", "data-source NX-API"]
+    sample: ["telemetry", "sensor-group 2", "data-source DME"]
 '''
 
 import re, yaml
@@ -92,8 +108,7 @@ from ansible.module_utils.network.common.config import CustomNetworkConfig
 TMS_CMD_REF = """
 # The cmd_ref is a yaml formatted list of module commands.
 # A leading underscore denotes a non-command variable; e.g. _template.
-# TBD: Use Structured
-#    TMS does not have convenient json data so this cmd_ref uses raw cli configs.
+# TBD: Use Structured Where Possible
 ---
 _template: # _template holds common settings for all commands
   # Enable feature telemetry if disabled
