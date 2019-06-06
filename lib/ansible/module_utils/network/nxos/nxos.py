@@ -911,6 +911,9 @@ class NxosCmdRef:
         """
         ref = self._ref
         if ref.get('_cli_is_feature_disabled'):
+            # Add context to proposed if state is present
+            if 'present' in ref['_state']:
+                [ref['_proposed'].append(ctx) for ctx in ref['_context']]
             return
 
         show_cmd = ref['_template']['get_command']
@@ -920,6 +923,9 @@ class NxosCmdRef:
 
         output = self.execute_show_command(show_cmd, 'text') or []
         if not output:
+            # Add context to proposed if state is present
+            if 'present' in ref['_state']:
+                [ref['_proposed'].append(ctx) for ctx in ref['_context']]
             return
 
         # We need to remove the last item in context for state absent case.
