@@ -1079,7 +1079,7 @@ class NxosCmdRef:
                 self.build_cmd_set(playval, existing, k)
 
         # Remove any duplicate commands before returning.
-        # return OrderedDict.fromkeys(proposed).keys()
+        # pylint: disable=unnecessary-lambda
         return sorted(set(proposed), key=lambda x: proposed.index(x))
 
 
