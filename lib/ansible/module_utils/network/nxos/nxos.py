@@ -38,6 +38,7 @@ from ansible.module_utils.network.common.utils import to_list, ComplexList
 from ansible.module_utils.connection import Connection, ConnectionError
 from ansible.module_utils.common._collections_compat import Mapping
 from ansible.module_utils.network.common.config import NetworkConfig, dumps
+from ansible.module_utils.network.common.config import CustomNetworkConfig
 from ansible.module_utils.six import iteritems, string_types, PY2, PY3
 from ansible.module_utils.urls import fetch_url
 
@@ -717,6 +718,7 @@ class NxosCmdRef:
         self._module = module
         self._check_imports()
         self._yaml_load(cmd_ref_str)
+        self.cache_existing = None
         ref = self._ref
 
         # Create a list of supported commands based on ref keys
@@ -905,7 +907,7 @@ class NxosCmdRef:
         # Last key in context is the resource key
         ref['_resource_key'] = context[-1] if context else ref['_resource_key']
 
-    def get_existing(self):
+    def get_existing(self, cache_output=None):
         """Update ref with existing command states from the device.
         Store these states in each command's 'existing' key.
         """
@@ -917,11 +919,21 @@ class NxosCmdRef:
             return
 
         show_cmd = ref['_template']['get_command']
-        # Add additional command context if needed.
-        for filter in ref['_context']:
-            show_cmd = show_cmd + " | section '{0}'".format(filter)
+        if cache_output:
+            logit('Using cached output')
+            output = cache_output
+        else:
+            logit('No cache, query device...')
+            output = self.execute_show_command(show_cmd, 'text') or []
+            self.cache_existing = output
 
-        output = self.execute_show_command(show_cmd, 'text') or []
+        output = CustomNetworkConfig(indent=2, contents=output)
+        # Add additional command context if needed.
+        if ref['_context']:
+            output = output.get_section(ref['_context'])
+
+        # import epdb ; epdb.serve()
+
         if not output:
             # Add context to proposed if state is present
             if 'present' in ref['_state']:
