@@ -7,8 +7,9 @@ author: Mike Wiebe (mikewiebe)
 httpapi: dcnm
 short_description: Send REST api calls to Data Center Network Manager (DCNM) NX-OS Fabric Controller.
 description:
-  - This DCNM plugin provides abstraction api's for sending and receiving
-    REST api calls to the DCNM Controller.
+  - This DCNM plugin provides the HTTPAPI transport methods needed to initiate
+    a connection to the DCNM controller, send API requests and process the
+    respsonse from the controller.
 version_added: "2.10"
 """
 
