@@ -31,7 +31,7 @@ class HttpApi(HttpApiBase):
         super(HttpApi, self).__init__(*args, **kwargs)
         self.headers = {
             'Content-Type': "application/json",
-            'Dcnm-Token': None
+            'Dcnm-Token': ''
         }
 
     def login(self, username, password):
@@ -65,28 +65,24 @@ class HttpApi(HttpApiBase):
             response, response_data = self.connection.send(path, json, method=method, headers=self.headers, force_basic_auth=True)
             self._verify_response(response, method, path)
             response_value = self._get_response_value(response_data)
-
             return self._response_to_json(response_value)
         except Exception as e:
-            if isinstance(e.message, dict):
-                if e.message.get('METHOD') is not None:
-                    return [e.message]
-                raise
-            else:
-                raise
+            eargs = e.args[0]
+            if isinstance(eargs, dict) and eargs.get('METHOD'):
+                return [eargs]
+            raise Exception(str(e))
 
     def _verify_response(self, response, method, path):
         ''' Process the return code and response object from DCNM '''
         rc = response.getcode()
         if rc == 200:
             return
-        elif rc >= 400:
+        if rc >= 400:
             path = response.geturl()
             msg = response.msg
-            raise Exception(self._return_error(rc, method, path, msg))
         else:
             msg = 'Unknown RETURN_CODE: {}'.format(rc)
-            raise Exception(self._return_error(rc, method, path, msg))
+        raise Exception(self._return_error(rc, method, path, msg))
 
     def _get_response_value(self, response_data):
         ''' Extract string data from response_data returned from DCNM '''
