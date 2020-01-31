@@ -51,34 +51,34 @@ options:
     - 'Name of the target fabric for VRF operations'
     type: str
     required: yes
-  vrfName:
+  vrf_name:
     description:
     - 'Name of the VRF being created'
     type: str
     required: yes
-  vrfTemplate:
+  vrf_template:
     description:
     - 'Name of the config template to be used'
     type: str
     required: no
     default: Default_VRF_Universal
-  vrfExtensionTemplate:
+  vrf_extension_template:
     description:
     - 'Name of the extension config template to be used'
     type: str
     required: no
     default: Default_VRF_Extension_Universal
-  vrfTemplateConfig:
+  vrf_templateConfig:
     description:
     - 'Any additional configs to be supplied'
     type: str
     required: no
-  vrfId:
+  vrf_id:
     description:
     - 'Unique ID for the VRF'
     type: int
     required: yes
-  serialNumbersVlans:
+  serial_numbers_vlans:
     description:
     - 'Serial number of the target switch for the VRF and VLAN ID to be used'
     type: list
@@ -98,18 +98,18 @@ EXAMPLES = '''
   dcnm_vrf:
     action: create
     fabric: vxlan-fabric
-    vrfName: ansible-vrf
-    vrfTemplate: Default_VRF_Universal
-    vrfExtensionTemplate: Default_VRF_Extension_Universal
-    vrfTemplateConfig: ""
-    vrfId: 9000010
+    vrf_name: ansible-vrf
+    vrf_template: Default_VRF_Universal
+    vrf_extension_template: Default_VRF_Extension_Universal
+    vrf_templateConfig: ""
+    vrf_id: 9000010
 
 - name: Attach VRF to single switch
   dcnm_vrf:
     action: attach
     fabric: vxlan-fabric
-    vrfName: ansible-vrf
-    serialNumbersVlans:
+    vrf_name: ansible-vrf
+    serial_numbers_vlans:
       - XXXXYYYY: 103
     deployment: False
 
@@ -117,8 +117,8 @@ EXAMPLES = '''
   dcnm_vrf:
     action: attach
     fabric: vxlan-fabric
-    vrfName: ansible-vrf
-    serialNumbersVlans:
+    vrf_name: ansible-vrf
+    serial_numbers_vlans:
       - XXXXYYYY: 103
       - YYYYXXXX: 104
       - ZZZXXXYY: 103
@@ -128,15 +128,15 @@ EXAMPLES = '''
   dcnm_vrf:
     action: deploy
     fabric: vxlan-fabric
-    vrfName: ansible-vrf
+    vrf_name: ansible-vrf
 '''
 
 
 def check_vrf_exists(module, conn):
 
     fabric = module.params['fabric']
-    vrf = module.params['vrfName']
-    path = '/rest/top-down/fabrics/' + fabric + '/vrfs/' + vrf
+    vrf = module.params['vrf_name']
+    path = '/rest/top-down/fabrics/{}/vrfs/{}'.format(fabric, vrf)
 
     response = conn.send_request('GET', path)
 
@@ -154,11 +154,11 @@ def vrf_create_payload(module):
 
     payload = dict()
     payload['fabric'] = module.params['fabric']
-    payload['vrfName'] = module.params['vrfName']
-    payload['vrfTemplate'] = module.params['vrfTemplate']
-    payload['vrfExtensionTemplate'] = module.params['vrfExtensionTemplate']
-    payload['vrfTemplateConfig'] = module.params['vrfTemplateConfig']
-    payload['vrfId'] = module.params['vrfId']
+    payload['vrfName'] = module.params['vrf_name']
+    payload['vrfTemplate'] = module.params['vrf_template']
+    payload['vrfExtensionTemplate'] = module.params['vrf_extension_template']
+    payload['vrfTemplateConfig'] = module.params['vrf_templateConfig']
+    payload['vrfId'] = module.params['vrf_id']
 
     json_data = json.dumps(payload)
 
@@ -169,14 +169,14 @@ def vrf_attach_payload(module):
 
     payload_list = list()
     payload = dict()
-    payload['vrfName'] = module.params['vrfName']
+    payload['vrfName'] = module.params['vrf_name']
     payload['lanAttachList'] = list()
 
-    for serials in module.params['serialNumbersVlans']:
+    for serials in module.params['serial_numbers_vlans']:
         for serial, vlan in serials.items():
             device_payload = dict()
             device_payload['fabric'] = module.params['fabric']
-            device_payload['vrfName'] = module.params['vrfName']
+            device_payload['vrfName'] = module.params['vrf_name']
             device_payload['serialNumber'] = serial
             device_payload['vlan'] = vlan
             device_payload['deployment'] = module.params['deployment']
@@ -195,7 +195,7 @@ def vrf_attach_payload(module):
 def vrf_deploy_payload(module):
 
     payload = dict()
-    payload['vrfNames'] = module.params['vrfName']
+    payload['vrfNames'] = module.params['vrf_name']
 
     json_data = json.dumps(payload)
 
@@ -209,18 +209,18 @@ def main():
     element_spec = dict(
         action=dict(required=True, choices=['create', 'attach', 'deploy']),
         fabric=dict(required=True, type='str'),
-        vrfName=dict(required=True, type='str'),
-        vrfTemplate=dict(default='Default_VRF_Universal', type='str'),
-        vrfExtensionTemplate=dict(default='Default_VRF_Extension_Universal', type='str'),
-        vrfTemplateConfig=dict(default='', type='str'),
-        vrfId=dict(type=int),
-        serialNumbersVlans=dict(type='list'),
+        vrf_name=dict(required=True, type='str'),
+        vrf_template=dict(default='Default_VRF_Universal', type='str'),
+        vrf_extension_template=dict(default='Default_VRF_Extension_Universal', type='str'),
+        vrf_templateConfig=dict(default='', type='str'),
+        vrf_id=dict(type=int),
+        serial_numbers_vlans=dict(type='list'),
         deployment=dict(default=False, type='bool')
     )
 
-    required_one_of = [['vrfId', 'vrfName']]
-    mutually_exclusive = [['vrfId'],
-                          ['serialNumbersVlans']]
+    required_one_of = [['vrf_id', 'vrf_name']]
+    mutually_exclusive = [['vrf_id'],
+                          ['serial_numbers_vlans']]
 
     module = AnsibleModule(argument_spec=element_spec,
                            required_one_of=required_one_of,
@@ -236,26 +236,26 @@ def main():
     fabric = module.params['fabric']
 
     method = 'POST'
-    create_path = '/rest/top-down/fabrics/' + fabric + '/vrfs'
-    attach_path = '/rest/top-down/fabrics/' + fabric + '/vrfs/attachments'
-    deploy_path = '/rest/top-down/fabrics/' + fabric + '/vrfs/deployments'
+    path = '/rest/top-down/fabrics/{}/vrfs'.format(fabric)
 
     conn = Connection(module._socket_path)
 
     if action == 'create':
         if not check_vrf_exists(module, conn):
             json_data = vrf_create_payload(module)
-            result['response'] = conn.send_request(method, create_path, json_data)
+            result['response'] = conn.send_request(method, path, json_data)
             result['changed'] = True
         else:
             result['changed'] = False
     elif action == 'attach':
         json_data = vrf_attach_payload(module)
-        result['response'] = conn.send_request(method, attach_path, json_data)
+        path += '/attachments'
+        result['response'] = conn.send_request(method, path, json_data)
         result['changed'] = True
     else:
         json_data = vrf_deploy_payload(module)
-        result['response'] = conn.send_request(method, deploy_path, json_data)
+        path += '/deployments'
+        result['response'] = conn.send_request(method, path, json_data)
         result['changed'] = True
 
     if isinstance(result['response'], list):
