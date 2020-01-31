@@ -68,7 +68,7 @@ options:
     type: str
     required: no
     default: Default_VRF_Extension_Universal
-  vrf_templateConfig:
+  vrf_template_config:
     description:
     - 'Any additional configs to be supplied'
     type: str
@@ -101,7 +101,7 @@ EXAMPLES = '''
     vrf_name: ansible-vrf
     vrf_template: Default_VRF_Universal
     vrf_extension_template: Default_VRF_Extension_Universal
-    vrf_templateConfig: ""
+    vrf_template_config: ""
     vrf_id: 9000010
 
 - name: Attach VRF to single switch
@@ -157,7 +157,7 @@ def vrf_create_payload(module):
     payload['vrfName'] = module.params['vrf_name']
     payload['vrfTemplate'] = module.params['vrf_template']
     payload['vrfExtensionTemplate'] = module.params['vrf_extension_template']
-    payload['vrfTemplateConfig'] = module.params['vrf_templateConfig']
+    payload['vrfTemplateConfig'] = module.params['vrf_template_config']
     payload['vrfId'] = module.params['vrf_id']
 
     json_data = json.dumps(payload)
@@ -212,7 +212,7 @@ def main():
         vrf_name=dict(required=True, type='str'),
         vrf_template=dict(default='Default_VRF_Universal', type='str'),
         vrf_extension_template=dict(default='Default_VRF_Extension_Universal', type='str'),
-        vrf_templateConfig=dict(default='', type='str'),
+        vrf_template_config=dict(default='', type='str'),
         vrf_id=dict(type=int),
         serial_numbers_vlans=dict(type='list'),
         deployment=dict(default=False, type='bool')
