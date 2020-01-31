@@ -131,6 +131,12 @@ EXAMPLES = '''
     vrf_name: ansible-vrf
 '''
 
+import datetime
+def logit(msg):
+    with open('/tmp/alog.txt', 'a') as of:
+        d = datetime.datetime.now().replace(microsecond=0).isoformat()
+        of.write("---- %s ----\n%s\n" % (d,msg))
+
 
 def check_vrf_exists(module, conn):
 
@@ -161,6 +167,8 @@ def vrf_create_payload(module):
     payload['vrfId'] = module.params['vrf_id']
 
     json_data = json.dumps(payload)
+
+    logit(json_data)
 
     return json_data
 
@@ -258,20 +266,16 @@ def main():
         result['response'] = conn.send_request(method, path, json_data)
         result['changed'] = True
 
-    if isinstance(result['response'], list):
-        if result['response']:
-            resp = list()
-            if result['response'][0].get('ERROR'):
-                resp.append(result['response'][0])
-                if action == 'create':
-                    resp.append("VRF ID is already in use")
-                module.fail_json(msg=resp)
+    res = result['response']
 
-    if isinstance(result['response'], dict):
-        if action == 'attach':
-            if 'is in use already' in str(result['response'].values()):
-                result['changed'] = False
-                module.fail_json(msg=result['response'])
+    if res and isinstance(res, list) and res[0].get('ERROR'):
+        vrf_dupe = "VRF ID is already in use" if (action == 'create') else ''
+        module.fail_json(msg=[res[0], vrf_dupe])
+
+    if res and isinstance(res, dict):
+        if action == 'attach' and 'is in use already' in str(res.values()):
+            result['changed'] = False
+            module.fail_json(msg=res)
 
     module.exit_json(**result)
 
