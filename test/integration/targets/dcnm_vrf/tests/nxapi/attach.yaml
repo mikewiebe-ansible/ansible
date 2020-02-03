@@ -1,0 +1,60 @@
+---
+- debug: msg="START connection={{ ansible_connection }}/create.yaml"
+
+- name: Verify if fabric - vxlan-shrishail-green-field is deployed.
+  dcnm_rest:
+    method: GET
+    path: /rest/control/fabrics/vxlan-shrishail-green-field
+  ignore_errors: yes
+  register: result
+
+- name: setup - remove the vrf
+  dcnm_rest:
+    method: DELETE
+    path: /rest/top-down/fabrics/vxlan-shrishail-green-field/vrfs/ansible-vrf-1
+  ignore_errors: yes
+
+- name: Create a VRF - ansible-vrf-1 under fabric vxlan-shrishail-green-field
+  dcnm_vrf:
+    action: create
+    fabric: vxlan-shrishail-green-field
+    vrf_name: ansible-vrf-1
+    vrf_id: 900100
+  register: result
+
+- name: Attach the VRF - ansible-vrf-1 to switch XYZ
+  dcnm_vrf: &conf
+    action: attach
+    fabric: vxlan-shrishail-green-field
+    vrf_name: ansible-vrf-1
+    serial_numbers_vlans:
+      - 947BSAMCAU1: 210
+    deployment: False
+  register: result
+
+- assert:
+    that:
+      - 'result.changed == true'
+      - '"SUCCESS" in result.response.values()'
+
+- name: conf1 - Idempotence
+  dcnm_vrf: *conf
+  register: result
+
+- assert:
+    that:
+      - 'result.changed == true'
+      - '"SUCCESS" in result.response.values()'
+
+- name: cleanup - remove the vrf
+  dcnm_rest:
+    method: DELETE
+    path: /rest/top-down/fabrics/vxlan-shrishail-green-field/vrfs/ansible-vrf-1
+  register: result
+
+- assert:
+    that:
+      - 'result.changed == false'
+      - 'result.response|length == 0'
+
+- debug: msg="END connection={{ ansible_connection }}/agg.yaml"
