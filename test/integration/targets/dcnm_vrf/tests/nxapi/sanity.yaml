@@ -1,0 +1,115 @@
+###
+###  TBD - These tests are still WIP, need to remove the hardcoded values and
+###  replace them with some logic or inventory.
+###
+---
+- debug: msg="START connection={{ ansible_connection }}/create.yaml"
+
+- name: Verify if fabric - vxlan-fabric is deployed.
+  dcnm_rest:
+    method: GET
+    path: /rest/control/fabrics/vxlan-fabric
+  register: result
+
+- assert:
+    that:
+      - 'result.response|length > 0'
+
+- name: setup - remove the vrf
+  dcnm_rest: &rm
+    method: DELETE
+    path: /rest/top-down/fabrics/vxlan-fabric/vrfs/ansible-vrf-1
+  ignore_errors: yes
+
+- name: Create a VRF - ansible-vrf-1 under fabric vxlan-fabric
+  dcnm_vrf: &conf1
+    action: create
+    fabric: vxlan-fabric
+    vrf_name: ansible-vrf-1
+    vrf_id: 900100
+  register: result
+
+- assert:
+    that:
+      - 'result.changed == true'
+      - 'result.response|length == 0'
+
+- name: conf1 - Idempotence
+  dcnm_vrf: *conf1
+  register: result
+
+- assert:
+    that:
+      - 'result.changed == false'
+      - 'result.response|length == 0'
+
+- name: Create a VRF - ansible-vrf-2 under fabric vxlan-fabric with an existing vrf_id
+  dcnm_vrf:
+    action: create
+    fabric: vxlan-fabric
+    vrf_name: ansible-vrf-2
+    vrf_id: 900100
+  register: result
+  ignore_errors: yes
+
+- assert:
+    that:
+      - 'result.changed == false'
+      - '"VRF ID is already in use" in result.msg'
+
+- name: Attach the VRF - ansible-vrf-1 to the switch
+  dcnm_vrf: &conf2
+    action: attach
+    fabric: vxlan-fabric
+    vrf_name: ansible-vrf-1
+    serial_numbers_vlans:
+      - 947BSAMCAU1: 210
+    deployment: False
+  register: result
+
+- assert:
+    that:
+      - '"SUCCESS" in result.response.values()'
+
+- name: conf2 - Idempotence
+  dcnm_vrf: *conf2
+  register: result
+
+- assert:
+    that:
+      - '"SUCCESS" in result.response.values()'
+
+- name: Deploy the VRF - ansible-vrf-1
+  dcnm_vrf: &conf3
+    action: deploy
+    fabric: vxlan-fabric
+    vrf_name: ansible-vrf-1
+  register: result
+
+- assert:
+    that:
+      - 'result.changed == true'
+      - 'result.response|length == 0'
+
+- name: conf3 - Idempotence
+  dcnm_vrf: *conf3
+
+  register: result
+
+- assert:
+    that:
+      - 'result.changed == true'
+      - 'result.response|length == 0'
+
+- name: cleanup - remove the vrf
+  dcnm_rest:
+    method: DELETE
+    path: /rest/top-down/fabrics/vxlan-fabric/vrfs/ansible-vrf-1
+  register: result
+
+- assert:
+    that:
+      - 'result.changed == false'
+      - 'result.response|length == 0'
+
+- debug: msg="END connection={{ ansible_connection }}/agg.yaml"
