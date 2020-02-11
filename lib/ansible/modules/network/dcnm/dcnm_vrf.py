@@ -20,8 +20,7 @@ import json
 from ansible.module_utils.connection import Connection
 from ansible.module_utils.basic import AnsibleModule
 
-__copyright__ = "Copyright (c) 2019 Cisco and/or its affiliates."
-__license__ = "Cisco Sample Code License, Version 1.0"
+__copyright__ = "Copyright (c) 2020 Cisco and/or its affiliates."
 __author__ = "Shrishail Kariyappanavar"
 
 
@@ -131,29 +130,25 @@ EXAMPLES = '''
     vrf_name: ansible-vrf
 '''
 
-import datetime
-def logit(msg):
-    with open('/tmp/alog.txt', 'a') as of:
-        d = datetime.datetime.now().replace(microsecond=0).isoformat()
-        of.write("---- %s ----\n%s\n" % (d,msg))
 
-
-def check_vrf_exists(module, conn):
+def check_vrf_exists(module):
 
     fabric = module.params['fabric']
     vrf = module.params['vrf_name']
     path = '/rest/top-down/fabrics/{}/vrfs/{}'.format(fabric, vrf)
 
-    response = conn.send_request('GET', path)
+    response = dcnm_connection(module, 'GET', path)
 
     if isinstance(response, dict):
-        if response['vrfName'] == vrf:
+        if response.get('vrfName') == vrf:
             return True
 
     if isinstance(response, list):
-        if response[0]:
+        if response and response[0]:
             if response[0].get('ERROR') == 'Bad Request':
                 return False
+
+    return False
 
 
 def vrf_create_payload(module):
@@ -167,8 +162,6 @@ def vrf_create_payload(module):
     payload['vrfId'] = module.params['vrf_id']
 
     json_data = json.dumps(payload)
-
-    logit(json_data)
 
     return json_data
 
@@ -209,6 +202,11 @@ def vrf_deploy_payload(module):
 
     return json_data
 
+def dcnm_connection(module, method, path, json_data):
+
+    conn = Connection(module._socket_path)
+    return conn.send_request(method, path, json_data)
+
 
 def main():
     """ main entry point for module execution
@@ -246,24 +244,22 @@ def main():
     method = 'POST'
     path = '/rest/top-down/fabrics/{}/vrfs'.format(fabric)
 
-    conn = Connection(module._socket_path)
-
     if action == 'create':
-        if not check_vrf_exists(module, conn):
+        if not check_vrf_exists(module):
             json_data = vrf_create_payload(module)
-            result['response'] = conn.send_request(method, path, json_data)
+            result['response'] = dcnm_connection(module, method, path, json_data)
             result['changed'] = True
         else:
             result['changed'] = False
     elif action == 'attach':
         json_data = vrf_attach_payload(module)
         path += '/attachments'
-        result['response'] = conn.send_request(method, path, json_data)
+        result['response'] = dcnm_connection(module, method, path, json_data)
         result['changed'] = True
     else:
         json_data = vrf_deploy_payload(module)
         path += '/deployments'
-        result['response'] = conn.send_request(method, path, json_data)
+        result['response'] = dcnm_connection(module, method, path, json_data)
         result['changed'] = True
 
     res = result['response']
