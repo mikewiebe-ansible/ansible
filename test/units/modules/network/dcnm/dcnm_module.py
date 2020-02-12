@@ -26,10 +26,7 @@ from units.modules.utils import AnsibleExitJson, AnsibleFailJson, ModuleTestCase
 from units.modules.utils import set_module_args as _set_module_args
 
 
-def set_module_args(args, ignore_provider=True):
-    if 'provider' not in args and not ignore_provider:
-        args['provider'] = {'transport': args.get('transport') or 'cli'}
-
+def set_module_args(args):
     return _set_module_args(args)
 
 

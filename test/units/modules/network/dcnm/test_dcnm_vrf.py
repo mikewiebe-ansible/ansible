@@ -62,12 +62,12 @@ class TestDcnmVrfModule(TestDcnmModule):
     def test_dcnm_vrf_create_new(self):
         set_module_args(dict(action='create', fabric='test_fabric', vrf_name='test_vrf', vrf_id=919191))
         result = self.execute_module(changed=True, failed=False)
-        self.assertEqual(result.get('changed'), True)
+        self.assertTrue(result.get('changed'))
 
     def test_dcnm_vrf_create_duplicate(self):
         set_module_args(dict(action='create', fabric='test_fabric', vrf_name='test_vrf', vrf_id=919191))
         result = self.execute_module(changed=False, failed=False)
-        self.assertEqual(result.get('changed'), False)
+        self.assertFalse(result.get('changed'))
 
     def test_dcnm_vrf_create_with_used_vrfid(self):
         set_module_args(dict(action='create', fabric='test_fabric', vrf_name='test_vrf', vrf_id=919191))
@@ -78,22 +78,22 @@ class TestDcnmVrfModule(TestDcnmModule):
         set_module_args(dict(action='attach', fabric='test_fabric', vrf_name='test_vrf',
                              deployment='False', serial_numbers_vlans=[{'947BSAMCAU1':'103'}]))
         result = self.execute_module(changed=True, failed=False)
-        self.assertEqual(result.get('changed'), True)
+        self.assertTrue(result.get('changed'))
 
     def test_dcnm_vrf_attach_multiple_switches(self):
         set_module_args(dict(action='attach', fabric='test_fabric', vrf_name='test_vrf',
                              deployment='False', serial_numbers_vlans=[{'947BSAMCAU1':'103'},
                                                                        {'947BSAMCBV1':'104'}]))
         result = self.execute_module(changed=True, failed=False)
-        self.assertEqual(result.get('changed'), True)
+        self.assertTrue(result.get('changed'))
 
     def test_dcnm_vrf_attach_with_used_vlan(self):
         set_module_args(dict(action='attach', fabric='test_fabric', vrf_name='test_vrf',
                              deployment='False', serial_numbers_vlans=[{'947BSAMCAU1':'103'}]))
         result = self.execute_module(changed=False, failed=True)
-        self.assertEqual(result.get('failed'), True)
+        self.assertTrue(result.get('failed'))
 
     def test_dcnm_vrf_deploy(self):
         set_module_args(dict(action='deploy', fabric='test_fabric', vrf_name='test_vrf'))
         result = self.execute_module(changed=True)
-        self.assertEqual(result.get('changed'), True)
+        self.assertTrue(result.get('changed'))
