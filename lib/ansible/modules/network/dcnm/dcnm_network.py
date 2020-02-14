@@ -53,7 +53,7 @@ EXAMPLES = '''
 import datetime
 def logit(msg):
     with open('/tmp/logit.txt', 'a') as of:
-        of.write("---- _network: %s\n" % (msg))
+        of.write("\n---- _network: %s\n" % (msg))
 
 def send(net_obj, method, path, payload=None):
     logit('send: path: %s' %path)
@@ -70,51 +70,46 @@ def send(net_obj, method, path, payload=None):
         else:
             return resp
     else:
+        logit('#### send: exception: %s' %resp)
         import epdb;epdb.serve()
         raise Exception('foo')
 
 def get_facts(net_obj):
-    """Check for existing network, attached state, and deployed state."""
+    """Check for existing network, attached state, and deployed state.
+    fabrics/{}/networks/{} is a per-net lookup.
+    fabrics/{}/networks/{}/attachments is a per-net lookup that gets a list of all attached switches.
+    """
     conn = net_obj['conn']
     params = net_obj['params']
+    net_name = params['net_name']
 
-    path = '/rest/top-down/fabrics/{}/networks/{}/status'.format(params['fabric'], params['net_name'])
-    net_obj['have'] = send(net_obj, 'GET', path)
-    logit('get_facts:response: %s' %net_obj['have'])
+    # Get network dict
+    path = '/rest/top-down/fabrics/{}/networks/{}'.format(params['fabric'], net_name)
+    have_net = send(net_obj, 'GET', path)
 
-    # FOLLOWING CODE CAN BE REMOVED
-    # Check for existing network
-    # path = net_obj['path'] + '/' + net_name
-    # have['net'] = send(net_obj, 'GET', path)
-    # logit('get_net:response: %s' %have['net'])
-    #
-    # Check for attach state
-    # if have['net']:
-    #     attach_path = path + '/' + 'attachments'
-    #     have['attach'] = send(net_obj, 'GET', attach_path)
-    #     logit('attch:response: %s' %have['attach'])
+    have_attach = []
+    if have_net:
+        # Get attach list for this net
+        path += '/attachments'
+        have_attach = send(net_obj, 'GET', path)
 
-        # Check for deployed state ## HOW?
+    net_obj['have_net'] = have_net
+    net_obj['have_attach'] = have_attach
 
-    # NET FACTS
-    # { "fabric": "cvh3", "networkName": "c1", "displayName": "c1", "networkId": 31120,
-    # "networkTemplate": "Default_Network_Universal", "networkExtensionTemplate": "Default_Network_Extension_Universal",
-    # "networkTemplateConfig": "{\"suppressArp\":\"false\",\"secondaryGW2\":\"\",\"secondaryGW1\":\"\",\"loopbackId\":\"\",\"vlanId\":\"2308\",\"gatewayIpAddress\":\"\",\"enableL3OnBorder\":\"false\",\"networkName\":\"c1\",\"vlanName\":\"\",\"enableIR\":\"false\",\"mtu\":\"\",\"rtBothAuto\":\"false\",\"isLayer2Only\":\"false\",\"intfDescription\":\"\",\"segmentId\":\"31120\",\"mcastGroup\":\"239.1.1.3\",\"gatewayIpV6Address\":\"\",\"trmEnabled\":\"false\",\"dhcpServerAddr2\":\"\",\"dhcpServerAddr1\":\"\",\"tag\":\"12345\",\"nveId\":\"1\",\"vrfDhcp\":\"\",\"vrfName\":\"MyVRF_50000\"}",
-    # "vrf": "MyVRF_50000", "serviceNetworkTemplate": null, "source": null }
+    logit('get_facts:net: %s' %have_net)
+    logit('get_facts:att: %s' %have_attach)
 
-    # ATTACH FACTS
-    # [{"networkName":"c1","lanAttachList":[{"networkName":"c1","switchName":"dt-n9k5-1","switchRole":"leaf","fabricName":"cvh3","lanAttachState":"PENDING","isLanAttached":true,"portNames":"Ethernet1/5","switchSerialNo":"SAL1821T9EF","switchDbId":336700,"ipAddress":"10.122.197.192","networkId":31120,"vlanId":2308}]}]
-
-def normalize_inputs(net_obj):
-    """Normalize the 'have' and 'want' data, then create a diff"""
-
-    have = net_obj.get('have', {})
-    logit('have: %s' %have)
-    cfg = json.loads(have.get('networkTemplateConfig', {}))
-    have_norm = {
-       'fabric': have['fabric'],
-       'template': have['networkTemplate'],
-       'template_ext': have['networkExtensionTemplate'],
+def _diff_net(net_obj):
+    """Normalize the 'have' and 'want' network data, then create a diff.
+    Results will be in 'have_net', 'want_net', 'diff_net'.
+    """
+    raw = net_obj.get('have_net', {})
+    logit('raw: %s' %raw)
+    cfg = json.loads(raw.get('networkTemplateConfig', {}))
+    have = {
+       'fabric': raw['fabric'],
+       'template': raw['networkTemplate'],
+       'template_ext': raw['networkExtensionTemplate'],
        'net_name': cfg.get('networkName'),
        'net_id': cfg.get('networkId'),
        'vlan_id': cfg.get('vlanId'),
@@ -122,21 +117,79 @@ def normalize_inputs(net_obj):
        'gw_ip': cfg.get('gatewayIpAddress'),
     }
     # DCNM sets empty integer fields to ''; set them to None to match 'want' params.
+    # TODO: Need better "None" compare; should I just call remove_empties?
     for k in ['net_id', 'vlan_id']:
-        have_norm[k] = int(have_norm[k]) if have_norm[k] else None
-    logit('normal: %s' %have_norm)
+        have[k] = int(have[k]) if have[k] else None
 
-    want = dict((k, net_obj['params'].get(k)) for k in have_norm.keys())
-    logit('want: %s' %want)
+    # 'want' data
+    want = dict((k, net_obj['params'].get(k)) for k in have.keys())
 
-    diff = dict_diff(want, have_norm)
-    logit('diff: %s' %diff)
-    net_obj['have'] = have_norm
-    net_obj['diff'] = diff
+    net_obj['diff_net'] = diff = dict_diff(want, have)
+    net_obj['want_net'] = want
+    net_obj['have_net'] = have
+    logit('have_net: %s' %have)
+    logit('want_net: %s' %want)
+    logit('diff_net: %s' %diff)
     # import epdb; epdb.serve()
 
+def _diff_attach(net_obj):
+    """Normalize the 'have' and 'want' network attach lists, then create a diff.
+    Results will be in 'have_attach', 'want_attach', 'diff_attach'.
+    """
+    raw = net_obj.get('have_attach', [])
+    logit('raw: %s' %raw)
+    have = []
+    for sw in raw:
+        sample_raw = [
+            {'networkName': 'c1', 'switchName': 'dt-n9k5-1', 'switchRole': 'leaf',
+             'fabricName': 'cvh4', 'lanAttachState': 'DEPLOYED', 'isLanAttached': True,
+             'portNames': 'Ethernet1/13,Ethernet1/12', 'switchSerialNo': 'SAL1821T9EF',
+             'switchDbId': 389920, 'ipAddress': '10.122.197.192', 'networkId': 30001,
+             'vlanId': 2301}]
+        ports = sw.get('portNames', '')
+        ports = ports.split(',') if ports else []
+
+        deploy = True if (sw.get('lanAttachState') in ['DEPLOYED', 'PENDING']) else False
+        have.append({
+            'name': sw.get('switchName'),   ### HOW BEST TO INDEX THESE? name? ip? both?
+            'ip': sw.get('ipAddress'),
+            'ports': ports,
+            'deploy': deploy
+        })
+
+    want_attach = []
+    diff_attach = []
+    for sw in net_obj['params'].get('attach', []):
+        ip = sw.get('ip')
+        want = {
+            'name': sw.get('name'),
+            'ip': ip,
+            'ports': sw.get('ports', []),
+            'deploy': sw.get('deploy')
+        }
+        hv = [i for i in have if i['ip'] == ip]
+        if hv:
+            hv = hv[0]
+            # {'name': 'dt-n9k5-1', 'ip': '10.122.197.192', 'ports': ['Ethernet1/13', 'Ethernet1/12'], 'deploy': 'DEPLOYED'}
+            diff = dict_diff(want, hv)
+            diff['ports'] = list(set(want['ports']) - set(hv['ports']))
+            diff_attach.append(diff)
+
+            logit('diff: %s' %diff)
+
+
+    net_obj['have_attach'] = have
+    net_obj['want_attach'] = want_attach
+    net_obj['diff_attach'] = diff_attach
+
+    logit('have_attach: %s' %have)
+    logit('want_attach: %s' %want_attach)
+    logit('diff_attach: %s' %diff_attach)
+    import epdb; epdb.serve()
+
+
 def deleted(net_obj):
-    # TODO: un-deploy / un-attach ??
+    # TODO: check attach state; also need to deploy change to devices
     fabric = net_obj['params']['fabric']
     net_name = net_obj['params']['net_name']
     path = '/rest/top-down/fabrics/{}/networks/{}'.format(fabric, net_name)
@@ -145,39 +198,41 @@ def deleted(net_obj):
     return resp
 
 def merged(net_obj):
-    # TODO: add attach/deploy calls to end of method
     # TODO: if vlan_id is empty then DCNM will automatically pick the next vlan from the fabric;
     #       however,net_id/VNI can also be automatically populated, in which case use
     #       POST /rest/managed-pool/fabrics/{{fabric}}/segments/ids
     #       to get the next avail VNI e.g. get_vni()
 
-    # TODO: ADD DIFF LOGIC TO DETERMINE IF MERGED SHOULD BE SKIPPED
     fabric = net_obj['params']['fabric']
     net_name = net_obj['params']['net_name']
-    diff = ['foo']
-    if diff:
-        payload = merged_payload(net_obj)
-        # TODO: CONSIDER MOVING JSONIFY'S INTO PAYLOAD MAKER
-        # jsonify the TemplateConfig by itself first, then do entire payload
-        payload['networkTemplateConfig'] = json.dumps(payload['networkTemplateConfig'])
-        payload = json.dumps(payload)
 
-        # TODO: Use 'PUT' for updates, 'POST' for creates  *****
+    # CREATE/UPDATE the network object
+    if net_obj['diff_net']:
+        method = 'PUT' if net_obj['have_net'] else 'POST'
         path = '/rest/top-down/fabrics/{}/networks/{}'.format(fabric, net_name)
-        resp = send(net_obj, 'POST', path, payload)
+        payload = net_payload_merged(net_obj)
+
+        resp = send(net_obj, method, path, payload)
         logit('create:response: %s' %resp)
+    else:
+        logit('merged: no diff')
 
-    # import epdb;epdb.serve()
+    import epdb;epdb.serve()
 
-    # TODO: ADD LOGIC TO DETERMINE WHEN ATTACH/DEPLOY ACTIONS SHOULD BE SKIPPED (idempotence)
+    # ATTACH the network
+    if net_obj['diff_attach']:
+        pass
+
+    # DEPLOY the network on devices
+    if net_obj['diff_deploy']:
+        pass
+
     # CASE: net is idempotent but attach list is not, or not all deployed
-    # attach()
-    # deploy()
     #
     return resp
 
-def merged_payload(net_obj):
-    """Create payload dict."""
+def net_payload_merged(net_obj):
+    """Create payload for network PUT/POST"""
     params = net_obj['params']
     net_name = params['net_name']
 
@@ -203,7 +258,9 @@ def merged_payload(net_obj):
         'gw_ip': 'gatewayIpAddress'
     }
     template = dict((template_cfg[k], params[k]) for k in template_cfg.keys() if params.get(k) is not None)
-    payload['networkTemplateConfig'] = template
+    # templateConfig needs to be in json syntax before overall payload
+    payload['networkTemplateConfig'] = json.dumps(template)
+    payload = json.dumps(payload)
 
     logit('buildPayload: %s' %payload)
     return payload
@@ -237,11 +294,11 @@ def main():
         'conn': Connection(module._socket_path),
     }
     get_facts(net_obj)
-    have = net_obj['have']
-
+    _diff_net(net_obj)
+    _diff_attach(net_obj)
+    # TODO: Add checkmode support
     result = dict(changed=False, response=dict())
     state = module.params['state']
-    normalize_inputs(net_obj)
     if state == 'query':
         resp = have
     elif state == 'deleted':
@@ -266,3 +323,12 @@ if __name__ == '__main__':
 #     # "networkTemplateConfig": "network_template_config",
 #     "networkId": "network_id",
 # }
+
+    # NET FACTS
+    # { "fabric": "cvh3", "networkName": "c1", "displayName": "c1", "networkId": 31120,
+    # "networkTemplate": "Default_Network_Universal", "networkExtensionTemplate": "Default_Network_Extension_Universal",
+    # "networkTemplateConfig": "{\"suppressArp\":\"false\",\"secondaryGW2\":\"\",\"secondaryGW1\":\"\",\"loopbackId\":\"\",\"vlanId\":\"2308\",\"gatewayIpAddress\":\"\",\"enableL3OnBorder\":\"false\",\"networkName\":\"c1\",\"vlanName\":\"\",\"enableIR\":\"false\",\"mtu\":\"\",\"rtBothAuto\":\"false\",\"isLayer2Only\":\"false\",\"intfDescription\":\"\",\"segmentId\":\"31120\",\"mcastGroup\":\"239.1.1.3\",\"gatewayIpV6Address\":\"\",\"trmEnabled\":\"false\",\"dhcpServerAddr2\":\"\",\"dhcpServerAddr1\":\"\",\"tag\":\"12345\",\"nveId\":\"1\",\"vrfDhcp\":\"\",\"vrfName\":\"MyVRF_50000\"}",
+    # "vrf": "MyVRF_50000", "serviceNetworkTemplate": null, "source": null }
+
+    # ATTACH FACTS
+    # [{"networkName":"c1","lanAttachList":[{"networkName":"c1","switchName":"dt-n9k5-1","switchRole":"leaf","fabricName":"cvh3","lanAttachState":"PENDING","isLanAttached":true,"portNames":"Ethernet1/5","switchSerialNo":"SAL1821T9EF","switchDbId":336700,"ipAddress":"10.122.197.192","networkId":31120,"vlanId":2308}]}]
