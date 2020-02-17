@@ -330,8 +330,9 @@ def main():
     get_diffs(facts)
 
     import epdb;epdb.serve()
-    _diff_attach(facts)
     # TODO: Add checkmode support
+
+    # WIP BELOW THIS POINT
     result = dict(changed=False, response=dict())
     state = module.params['state']
     if state == 'query':
