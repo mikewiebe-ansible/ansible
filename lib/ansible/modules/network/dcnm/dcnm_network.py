@@ -211,7 +211,7 @@ def get_diffs(facts):
             name = param['net_name']
             have = facts['have'].get(name, {}).get(data_type, {})
             want = facts['want'].get(name, {}).get(data_type, {})
-            diff = dict_diff(want, have)
+            diff = dict_diff(have, want)
 
             # ...clean up diff here...?
             facts['diff'][name] = { data_type: diff }
