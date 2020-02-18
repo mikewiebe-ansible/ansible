@@ -17,6 +17,8 @@
 #
 
 import json
+from textwrap import dedent
+
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.connection import Connection
 from ansible.module_utils.network.common.utils import dict_diff
@@ -220,6 +222,38 @@ def get_diffs(facts):
 
     # import epdb;epdb.serve()
 
+def query(facts):
+    """Create a yaml-formatted string of current 'have' data.
+    have[name][net]
+    have[name][att][ip]
+    """
+    have = facts['have']
+    net_keys = ['net_id', 'vrf', 'vlan_id', 'gw_ip']
+    att_keys = ['name', 'ports', 'deploy']
+
+    # Consider: do not display when arg set to default?
+    rpt = dedent('''\
+    tasks:
+      dcnm_network:
+        fabric: {}
+        config:''').format(facts['fabric'])
+    for name in have.keys():
+        net = have[name].get('net')
+        rpt += '\n    - net_name: {}'.format(name)
+        for k in net_keys:
+            if net.get(k) is not None:  ## TBD: assumes always exists. safe?
+                rpt += '\n      {}: {}'.format(k, net[k])
+        att = have[name].get('att')
+        if att:
+            rpt += '\n      attach:'
+            for ip in att.keys():
+                rpt += '\n        - ip: {}'.format(ip)
+                for k in att_keys:
+                    if att[ip].get(k) is not None:
+                        rpt += '\n          {}: {}'.format(k, att[ip][k])
+    logit('rpt: %s' %rpt)
+    # import epdb;epdb.serve()
+    return rpt
 
 def deleted(facts):
     # TODO: check attach state; also need to deploy change to devices
@@ -329,17 +363,18 @@ def main():
     populate_facts(facts)
     get_diffs(facts)
 
-    import epdb;epdb.serve()
     # TODO: Add checkmode support
 
     # WIP BELOW THIS POINT
     result = dict(changed=False, response=dict())
     state = module.params['state']
     if state == 'query':
-        resp = have
+        resp = query(facts)
+        # Q: what is the proper way to return this output to user?
     elif state == 'deleted':
         resp = deleted(facts)
     elif state == 'merged':
+        import epdb;epdb.serve()
         if have:  ## TEST CODE ONLY - REMOVES NET FOR MERGED TESTING
             deleted(facts)  ## REMOVEME
 
