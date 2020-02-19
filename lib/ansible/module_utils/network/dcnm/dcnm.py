@@ -22,8 +22,8 @@ def get_fabric_inventory_details(module, fabric):
     method = 'GET'
     path = '/rest/control/fabrics/{}/inventory'.format(fabric)
 
-    all_ip_serial = dict()
-    response = dcnm_connection(module, method, path)
+    ip_sn = dict()
+    response = dcnm_send(module, method, path)
 
     if response and isinstance(response, list):
         if response[0].get('ERROR') == 'Not Found' and \
@@ -31,14 +31,14 @@ def get_fabric_inventory_details(module, fabric):
                 return {}
 
     for device in response:
-        ip_addr = device.get('ipAddress')
-        serial_number = device.get('serialNumber')
-        all_ip_serial.update({ip_addr: serial_number})
+        ip = device.get('ipAddress')
+        sn = device.get('serialNumber')
+        ip_sn.update({ip: sn})
 
-    return all_ip_serial
+    return ip_sn
 
 
-def dcnm_connection(module, method, path, json_data=None):
+def dcnm_send(module, method, path, json_data=None):
 
     conn = Connection(module._socket_path)
     return conn.send_request(method, path, json_data)
