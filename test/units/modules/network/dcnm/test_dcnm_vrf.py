@@ -20,6 +20,7 @@ from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
 from units.compat.mock import patch
+
 from ansible.modules.network.dcnm import dcnm_vrf
 from .dcnm_module import TestDcnmModule, set_module_args
 
@@ -31,12 +32,12 @@ class TestDcnmVrfModule(TestDcnmModule):
     def setUp(self):
         super(TestDcnmVrfModule, self).setUp()
 
-        self.mock_dcnm_connection = patch('ansible.modules.network.dcnm.dcnm_vrf.dcnm_connection')
-        self.run_dcnm_connection = self.mock_dcnm_connection.start()
+        self.mock_dcnm_send = patch('ansible.modules.network.dcnm.dcnm_vrf.dcnm_send')
+        self.run_dcnm_send = self.mock_dcnm_send.start()
 
     def tearDown(self):
         super(TestDcnmVrfModule, self).tearDown()
-        self.mock_dcnm_connection.stop()
+        self.mock_dcnm_send.stop()
 
     def load_fixtures(self, response=None, device=''):
         create_err_resp = list([dict(ERROR='Bad Request')])
@@ -45,17 +46,17 @@ class TestDcnmVrfModule(TestDcnmModule):
         deploy_success_resp = dict({"status":""})
 
         if '_create_new' in self._testMethodName:
-            self.run_dcnm_connection.side_effect = [create_err_resp, dict()]
+            self.run_dcnm_send.side_effect = [create_err_resp, dict()]
         elif '_create_duplicate' in self._testMethodName:
-            self.run_dcnm_connection.side_effect = [dict(vrfName='test_vrf'), dict()]
+            self.run_dcnm_send.side_effect = [dict(vrfName='test_vrf'), dict()]
         elif '_create_with_used' in self._testMethodName:
-            self.run_dcnm_connection.side_effect = [create_err_resp, create_err_resp]
+            self.run_dcnm_send.side_effect = [create_err_resp, create_err_resp]
         elif 'attach_multiple' in self._testMethodName or 'attach_single' in self._testMethodName:
-            self.run_dcnm_connection.side_effect = [attach_success_resp]
+            self.run_dcnm_send.side_effect = [attach_success_resp]
         elif 'used_vlan' in self._testMethodName:
-            self.run_dcnm_connection.side_effect = [attach_err_resp]
+            self.run_dcnm_send.side_effect = [attach_err_resp]
         elif 'deploy' in self._testMethodName:
-            self.run_dcnm_connection.side_effect = [deploy_success_resp]
+            self.run_dcnm_send.side_effect = [deploy_success_resp]
         else:
             pass
 

@@ -17,7 +17,7 @@
 #
 
 import json
-from ansible.module_utils.connection import Connection
+from ansible.module_utils.network.dcnm.dcnm import dcnm_send
 from ansible.module_utils.basic import AnsibleModule
 
 __copyright__ = "Copyright (c) 2020 Cisco and/or its affiliates."
@@ -137,7 +137,7 @@ def check_vrf_exists(module):
     vrf = module.params['vrf_name']
     path = '/rest/top-down/fabrics/{}/vrfs/{}'.format(fabric, vrf)
 
-    response = dcnm_connection(module, 'GET', path)
+    response = dcnm_send(module, 'GET', path)
 
     if isinstance(response, dict):
         if response.get('vrfName') == vrf:
@@ -202,10 +202,6 @@ def vrf_deploy_payload(module):
 
     return json_data
 
-def dcnm_connection(module, method, path, json_data):
-
-    conn = Connection(module._socket_path)
-    return conn.send_request(method, path, json_data)
 
 
 def main():
@@ -247,19 +243,19 @@ def main():
     if action == 'create':
         if not check_vrf_exists(module):
             json_data = vrf_create_payload(module)
-            result['response'] = dcnm_connection(module, method, path, json_data)
+            result['response'] = dcnm_send(module, method, path, json_data)
             result['changed'] = True
         else:
             result['changed'] = False
     elif action == 'attach':
         json_data = vrf_attach_payload(module)
         path += '/attachments'
-        result['response'] = dcnm_connection(module, method, path, json_data)
+        result['response'] = dcnm_send(module, method, path, json_data)
         result['changed'] = True
     else:
         json_data = vrf_deploy_payload(module)
         path += '/deployments'
-        result['response'] = dcnm_connection(module, method, path, json_data)
+        result['response'] = dcnm_send(module, method, path, json_data)
         result['changed'] = True
 
     res = result['response']
