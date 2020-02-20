@@ -49,7 +49,7 @@ class HttpApi(HttpApiBase):
             self.headers['Dcnm-Token'] = self._response_to_json(response_value)['Dcnm-Token']
         except Exception as e:
             msg = 'Error on attempt to connect and authenticate with DCNM controller: {}'.format(e)
-            raise Exception(self._return_error(None, method, path, msg))
+            raise Exception(self._return_info(None, method, path, msg))
 
     def send_request(self, method, path, json=None):
         ''' This method handles all DCNM REST API requests other then login '''
@@ -61,28 +61,33 @@ class HttpApi(HttpApiBase):
             path = str(path)
             if path[0] != '/':
                 msg = 'Value of <path> does not appear to be formated properly'
-                raise Exception(self._return_error(None, method, path, msg))
-            response, response_data = self.connection.send(path, json, method=method, headers=self.headers, force_basic_auth=True)
-            self._verify_response(response, method, path)
-            response_value = self._get_response_value(response_data)
-            return self._response_to_json(response_value)
+                raise Exception(self._return_info(None, method, path, msg))
+            response, rdata = self.connection.send(path, json, method=method,
+                                                   headers=self.headers,
+                                                   force_basic_auth=True)
+            return self._verify_response(response, method, path, rdata)
         except Exception as e:
             eargs = e.args[0]
             if isinstance(eargs, dict) and eargs.get('METHOD'):
                 return [eargs]
             raise Exception(str(e))
 
-    def _verify_response(self, response, method, path):
+    def _verify_response(self, response, method, path, rdata):
         ''' Process the return code and response object from DCNM '''
+
+        rv = self._get_response_value(rdata)
+        jrd = self._response_to_json(rv)
         rc = response.getcode()
+        path = response.geturl()
+        msg = response.msg
         if rc == 200:
-            return
+            return self._return_info(rc, method, path, msg, jrd)
         if rc >= 400:
-            path = response.geturl()
-            msg = response.msg
+            # Add future error code processing here
+            pass
         else:
             msg = 'Unknown RETURN_CODE: {}'.format(rc)
-        raise Exception(self._return_error(rc, method, path, msg))
+        raise Exception(self._return_info(rc, method, path, msg, jrd))
 
     def _get_response_value(self, response_data):
         ''' Extract string data from response_data returned from DCNM '''
@@ -94,15 +99,16 @@ class HttpApi(HttpApiBase):
             return json.loads(response_text) if response_text else {}
         # JSONDecodeError only available on Python 3.5+
         except ValueError:
-            msg = 'Invalid JSON response: {}'.format(response_text)
-            raise ConnectionError(self._return_error(None, None, None, msg))
+            return 'Invalid JSON response: {}'.format(response_text)
 
-    def _return_error(self, rc, method, path, error):
-        ''' Format error data returned in a raise with a consistent dict format '''
-        error_info = {}
-        error_info['RETURN_CODE'] = rc
-        error_info['METHOD'] = method
-        error_info['REQUEST_PATH'] = path
-        error_info['ERROR'] = error
+    def _return_info(self, rc, method, path, msg, json_respond_data=None):
+        ''' Format success/error data and return with consistent format '''
 
-        return error_info
+        info = {}
+        info['RETURN_CODE'] = rc
+        info['METHOD'] = method
+        info['REQUEST_PATH'] = path
+        info['MESSAGE'] = msg
+        info['DATA'] = json_respond_data
+
+        return info
