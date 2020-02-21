@@ -26,15 +26,13 @@ def get_fabric_inventory_details(module, fabric):
     ip_sn = dict()
     response = dcnm_send(module, method, path)
 
-    if response and isinstance(response, list):
-        response = response[0]
-        if response.get('RETURN_CODE') == 404:
-            # RC 404 - Object not found
-            return ip_sn
-        if response.get('RETURN_CODE') >= 400:
-            # Handle additional return codes as needed but for now raise
-            # for any error other then 404.
-            raise Exception(response)
+    if response.get('RETURN_CODE') == 404:
+        # RC 404 - Object not found
+        return ip_sn
+    if response.get('RETURN_CODE') >= 400:
+        # Handle additional return codes as needed but for now raise
+        # for any error other then 404.
+        raise Exception(response)
 
     for device in response.get('DATA'):
         ip = device.get('ipAddress')

@@ -69,7 +69,7 @@ class HttpApi(HttpApiBase):
         except Exception as e:
             eargs = e.args[0]
             if isinstance(eargs, dict) and eargs.get('METHOD'):
-                return [eargs]
+                return eargs
             raise Exception(str(e))
 
     def _verify_response(self, response, method, path, rdata):
