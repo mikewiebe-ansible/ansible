@@ -41,7 +41,7 @@ description:
       Please note that the PyOpenSSL backend was deprecated in Ansible 2.9 and will be removed in Ansible 2.13.
 requirements:
     - PyOpenSSL >= 0.15 or cryptography >= 1.6 (if using C(selfsigned) or C(assertonly) provider)
-    - acme-tiny (if using the C(acme) provider)
+    - acme-tiny >= 4.0.0 (if using the C(acme) provider)
 author:
   - Yanis Guenane (@Spredzy)
   - Markus Teufelberger (@MarkusTeufelberger)
@@ -67,7 +67,7 @@ options:
               Please see the examples on how to emulate it with M(openssl_certificate_info), M(openssl_csr_info),
               M(openssl_privatekey_info) and M(assert).
             - "The C(entrust) provider was added for Ansible 2.9 and requires credentials for the
-               L(https://www.entrustdatacard.com/products/categories/ssl-certificates,Entrust Certificate Services) (ECS) API."
+               L(Entrust Certificate Services,https://www.entrustdatacard.com/products/categories/ssl-certificates) (ECS) API."
             - Required if I(state) is C(present).
         type: str
         choices: [ acme, assertonly, entrust, ownca, selfsigned ]
@@ -299,6 +299,14 @@ options:
         type: bool
         default: no
         version_added: "2.5"
+
+    acme_directory:
+        description:
+            - "The ACME directory to use. You can use any directory that supports the ACME protocol, such as Buypass or Let's Encrypt."
+            - "Let's Encrypt recommends using their staging server while developing jobs. U(https://letsencrypt.org/docs/staging-environment/)."
+        type: str
+        default: https://acme-v02.api.letsencrypt.org/directory
+        version_added: "2.10"
 
     signature_algorithms:
         description:
@@ -590,6 +598,13 @@ options:
         default: https://cloud.entrust.net/EntrustCloud/documentation/cms-api-2.1.0.yaml
         version_added: "2.9"
 
+    return_content:
+        description:
+            - If set to C(yes), will return the (current or generated) certificate's content as I(certificate).
+        type: bool
+        default: no
+        version_added: "2.10"
+
 extends_documentation_fragment: files
 notes:
     - All ASN.1 TIME values should be specified following the YYYYMMDDHHMMSSZ pattern.
@@ -852,6 +867,11 @@ backup_file:
     returned: changed and if I(backup) is C(yes)
     type: str
     sample: /path/to/www.ansible.com.crt.2019-03-09@11:22~
+certificate:
+    description: The (current or generated) certificate's content.
+    returned: if I(state) is C(present) and I(return_content) is C(yes)
+    type: str
+    version_added: "2.10"
 '''
 
 
@@ -929,6 +949,7 @@ class Certificate(crypto_utils.OpenSSLObject):
         self.csr = None
         self.backend = backend
         self.module = module
+        self.return_content = module.params['return_content']
 
         # The following are default values which make sure check() works as
         # before if providers do not explicitly change these properties.
@@ -1115,6 +1136,8 @@ class CertificateAbsent(Certificate):
         }
         if self.backup_file:
             result['backup_file'] = self.backup_file
+        if self.return_content:
+            result['certificate'] = None
 
         return result
 
@@ -1230,6 +1253,9 @@ class SelfSignedCertificateCryptography(Certificate):
         }
         if self.backup_file:
             result['backup_file'] = self.backup_file
+        if self.return_content:
+            content = crypto_utils.load_file_if_exists(self.path, ignore_errors=True)
+            result['certificate'] = content.decode('utf-8') if content else None
 
         if check_mode:
             result.update({
@@ -1327,6 +1353,9 @@ class SelfSignedCertificate(Certificate):
         }
         if self.backup_file:
             result['backup_file'] = self.backup_file
+        if self.return_content:
+            content = crypto_utils.load_file_if_exists(self.path, ignore_errors=True)
+            result['certificate'] = content.decode('utf-8') if content else None
 
         if check_mode:
             result.update({
@@ -1521,6 +1550,9 @@ class OwnCACertificateCryptography(Certificate):
         }
         if self.backup_file:
             result['backup_file'] = self.backup_file
+        if self.return_content:
+            content = crypto_utils.load_file_if_exists(self.path, ignore_errors=True)
+            result['certificate'] = content.decode('utf-8') if content else None
 
         if check_mode:
             result.update({
@@ -1644,6 +1676,9 @@ class OwnCACertificate(Certificate):
         }
         if self.backup_file:
             result['backup_file'] = self.backup_file
+        if self.return_content:
+            content = crypto_utils.load_file_if_exists(self.path, ignore_errors=True)
+            result['certificate'] = content.decode('utf-8') if content else None
 
         if check_mode:
             result.update({
@@ -1959,6 +1994,9 @@ class AssertOnlyCertificateBase(Certificate):
             'privatekey': self.privatekey_path,
             'csr': self.csr_path,
         }
+        if self.return_content:
+            content = crypto_utils.load_file_if_exists(self.path, ignore_errors=True)
+            result['certificate'] = content.decode('utf-8') if content else None
         return result
 
 
@@ -2424,6 +2462,9 @@ class EntrustCertificate(Certificate):
 
         if self.backup_file:
             result['backup_file'] = self.backup_file
+        if self.return_content:
+            content = crypto_utils.load_file_if_exists(self.path, ignore_errors=True)
+            result['certificate'] = content.decode('utf-8') if content else None
 
         result.update(self._get_cert_details())
 
@@ -2441,6 +2482,7 @@ class AcmeCertificate(Certificate):
         self.accountkey_path = module.params['acme_accountkey_path']
         self.challenge_path = module.params['acme_challenge_path']
         self.use_chain = module.params['acme_chain']
+        self.acme_directory = module.params['acme_directory']
 
     def generate(self, module):
 
@@ -2486,6 +2528,7 @@ class AcmeCertificate(Certificate):
             else:
                 command.extend(['--csr', self.csr_path])
             command.extend(['--acme-dir', self.challenge_path])
+            command.extend(['--directory-url', self.acme_directory])
 
             try:
                 crt = module.run_command(command, check_rc=True)[1]
@@ -2511,6 +2554,9 @@ class AcmeCertificate(Certificate):
         }
         if self.backup_file:
             result['backup_file'] = self.backup_file
+        if self.return_content:
+            content = crypto_utils.load_file_if_exists(self.path, ignore_errors=True)
+            result['certificate'] = content.decode('utf-8') if content else None
 
         return result
 
@@ -2526,6 +2572,7 @@ def main():
             csr_content=dict(type='str'),
             backup=dict(type='bool', default=False),
             select_crypto_backend=dict(type='str', default='auto', choices=['auto', 'cryptography', 'pyopenssl']),
+            return_content=dict(type='bool', default=False),
 
             # General properties of a certificate
             privatekey_path=dict(type='path'),
@@ -2584,6 +2631,7 @@ def main():
             acme_accountkey_path=dict(type='path'),
             acme_challenge_path=dict(type='path'),
             acme_chain=dict(type='bool', default=False),
+            acme_directory=dict(type='str', default="https://acme-v02.api.letsencrypt.org/directory"),
 
             # provider: entrust
             entrust_cert_type=dict(type='str', default='STANDARD_SSL',

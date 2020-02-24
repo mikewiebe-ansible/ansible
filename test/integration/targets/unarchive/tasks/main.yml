@@ -18,21 +18,12 @@
 # Make sure we start fresh
 
 # Need unzip for unarchive module, and zip for archive creation.
-- name: Ensure zip and unzip is present to create test archive (yum)
-  yum: name=zip,unzip state=latest
-  when: ansible_pkg_mgr  ==  'yum'
-
-- name: Ensure zip is present to create test archive (dnf)
-  dnf: name=zip state=latest
-  when: ansible_pkg_mgr  ==  'dnf'
-
-- name: Ensure zip & unzip is present to create test archive (apt)
-  apt: name=zip,unzip state=latest
-  when: ansible_pkg_mgr  ==  'apt'
-
-- name: Ensure zip & unzip is present to create test archive (pkg)
-  pkgng: name=zip,unzip state=present
-  when: ansible_pkg_mgr  ==  'pkgng'
+- name: Ensure zip & unzip are present
+  package:
+    name:
+      - zip
+      - unzip
+  when: ansible_pkg_mgr in ('yum', 'dnf', 'apt', 'pkgng')
 
 - name: prep our file
   copy: src=foo.txt dest={{remote_tmp_dir}}/foo-unarchive.txt
@@ -634,15 +625,15 @@
   file: path={{remote_tmp_dir}}/test-unarchive-tar-gz state=directory
 
 - name: Install packages to make TLS connections work on CentOS 6
-  yum:
+  pip:
     name:
-      - python-urllib3
-      - python2-ndg_httpsclient
+      - urllib3==1.10.2
+      - ndg_httpsclient==0.4.4
+      - pyOpenSSL==16.2.0
     state: present
   when:
     - ansible_facts.distribution == 'CentOS'
     - not ansible_facts.python.has_sslcontext
-  notify: remove python TLS packages
 
 - name: unarchive a tar from an URL
   unarchive:

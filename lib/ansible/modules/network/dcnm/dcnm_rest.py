@@ -93,8 +93,10 @@ def main():
 
     conn = Connection(module._socket_path)
     result['response'] = conn.send_request(method, path, json_data)
-    if result['response'][0].get('ERROR'):
-        module.fail_json(msg=result['response'])
+
+    res = result['response']
+    if res and isinstance(res, list) and res[0].get('ERROR'):
+        module.fail_json(msg=res)
 
     module.exit_json(**result)
 

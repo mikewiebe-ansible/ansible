@@ -1,4 +1,4 @@
 needs/root
 shippable/posix/group2
 destructive
-unstable
+skip/aix
