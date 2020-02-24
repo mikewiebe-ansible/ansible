@@ -153,7 +153,7 @@ resources:
         for this forwarding rule.
       - 'An address can be specified either by a literal IP address or a URL reference
         to an existing Address resource. The following examples are all valid: * 100.1.2.3
-        * U(https://www.googleapis.com/compute/v1/projects/project/regions/region/addresses/address)
+        * https://www.googleapis.com/compute/v1/projects/project/regions/region/addresses/address
         * projects/project/regions/region/addresses/address * regions/region/addresses/address
         * global/addresses/address * address .'
       returned: success
@@ -171,11 +171,6 @@ resources:
         load balancing.
       returned: success
       type: dict
-    ipVersion:
-      description:
-      - ipVersion is not a valid field for regional forwarding rules.
-      returned: success
-      type: str
     loadBalancingScheme:
       description:
       - This signifies what the ForwardingRule will be used for and can be EXTERNAL,

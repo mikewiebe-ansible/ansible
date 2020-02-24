@@ -11,7 +11,7 @@
     resource_pool: Resources
     guest_id: centos64Guest
     hardware:
-      memory_mb: 512
+      memory_mb: 128
       num_cpus: 1
       scsi: paravirtual
     disk:
@@ -114,14 +114,14 @@
     hostname: "{{ vcenter_hostname }}"
     username: "{{ vcenter_username }}"
     password: "{{ vcenter_password }}"
-    folder: vm
+    folder: "{{ f0 }}"
     name: test_vm3
     datacenter: "{{ dc1 }}"
     cluster: "{{ ccr1 }}"
     resource_pool: Resources
     guest_id: centos64Guest
     hardware:
-      memory_mb: 512
+      memory_mb: 128
       num_cpus: 1
       scsi: paravirtual
     disk:
@@ -159,7 +159,7 @@
     resource_pool: Resources
     guest_id: centos64Guest
     hardware:
-      memory_mb: 512
+      memory_mb: 128
       num_cpus: 1
       scsi: paravirtual
     disk:
@@ -245,7 +245,7 @@
         resource_pool: Resources
         guest_id: centos64Guest
         hardware:
-          memory_mb: 512
+          memory_mb: 128
           num_cpus: 1
           scsi: paravirtual
         disk:

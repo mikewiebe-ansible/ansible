@@ -208,7 +208,7 @@ options:
             description:
             - Must be greater than 1.
             required: false
-            type: int
+            type: str
           scale:
             description:
             - Must be greater than 0.
@@ -223,7 +223,7 @@ options:
           bounds:
             description:
             - The values must be monotonically increasing.
-            required: false
+            required: true
             type: list
   project:
     description:
@@ -456,7 +456,7 @@ bucketOptions:
           description:
           - Must be greater than 1.
           returned: success
-          type: int
+          type: str
         scale:
           description:
           - Must be greater than 0.
@@ -518,9 +518,9 @@ def main():
                 options=dict(
                     linear_buckets=dict(type='dict', options=dict(num_finite_buckets=dict(type='int'), width=dict(type='int'), offset=dict(type='str'))),
                     exponential_buckets=dict(
-                        type='dict', options=dict(num_finite_buckets=dict(type='int'), growth_factor=dict(type='int'), scale=dict(type='str'))
+                        type='dict', options=dict(num_finite_buckets=dict(type='int'), growth_factor=dict(type='str'), scale=dict(type='str'))
                     ),
-                    explicit_buckets=dict(type='dict', options=dict(bounds=dict(type='list', elements='str'))),
+                    explicit_buckets=dict(type='dict', options=dict(bounds=dict(required=True, type='list', elements='str'))),
                 ),
             ),
         )

@@ -1,7 +1,13 @@
+---
 - name: Generate privatekey1 - standard
   openssh_keypair:
     path: '{{ output_dir }}/privatekey1'
   register: privatekey1_result
+
+- name: Generate privatekey1 - standard (idempotent)
+  openssh_keypair:
+    path: '{{ output_dir }}/privatekey1'
+  register: privatekey1_idem_result
 
 - name: Generate privatekey2 - size 2048
   openssh_keypair:
@@ -48,11 +54,19 @@
     - '{{ output_dir }}/privatekeybroken'
     - '{{ output_dir }}/privatekeybroken.pub'
 
-- name: Regenerate broken key
+- name: Regenerate broken key - should fail
   openssh_keypair:
     path: '{{ output_dir }}/privatekeybroken'
     type: rsa
   register: output_broken
+  ignore_errors: yes
+
+- name: Regenerate broken key with force
+  openssh_keypair:
+    path: '{{ output_dir }}/privatekeybroken'
+    type: rsa
+    force: yes
+  register: output_broken_force
 
 - name: Generate read-only private key
   openssh_keypair:
@@ -78,5 +92,20 @@
     path: '{{ output_dir }}/privatekey7'
     comment: 'test_modified@privatekey7'
   register: privatekey7_modified_result
+
+- name: Generate password protected key
+  command: 'ssh-keygen -f {{ output_dir }}/privatekey8 -N password'
+
+- name: Try to modify the password protected key - should fail
+  openssh_keypair:
+    path: '{{ output_dir }}/privatekey8'
+  register: privatekey8_result
+  ignore_errors: yes
+
+- name: Try to modify the password protected key with force=yes
+  openssh_keypair:
+    path: '{{ output_dir }}/privatekey8'
+    force: yes
+  register: privatekey8_result_force
 
 - import_tasks: ../tests/validate.yml
