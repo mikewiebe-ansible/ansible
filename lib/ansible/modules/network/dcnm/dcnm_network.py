@@ -17,13 +17,11 @@
 #
 
 import json
-import socket
 from textwrap import dedent
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.common import validation
-# from ansible.module_utils.connection import Connection
 from ansible.module_utils.network.dcnm.dcnm import dcnm_send, get_fabric_inventory_details
+from ansible.module_utils.network.dcnm.dcnm import validate_list_of_dicts
 from ansible.module_utils.network.common.utils import dict_diff, remove_empties
 
 ANSIBLE_METADATA = {'metadata_version': '1.1',
@@ -122,7 +120,7 @@ class DcnmNetwork:
             deploy=dict(type='bool', default=True)
         )
         want = self.want
-        valid_net_list = self.validate_list_of_dicts(self.config, net_spec)
+        valid_net_list = validate_list_of_dicts(self.config, net_spec)
         # Create a dict of net data
         for i in valid_net_list:
             net_name = i['net_name']
@@ -139,7 +137,7 @@ class DcnmNetwork:
             # Create a dict of att data
             if i['attach']:
                 want[net_name]['att'] = {}
-                valid_att_list = self.validate_list_of_dicts(i['attach'], att_spec)
+                valid_att_list = validate_list_of_dicts(i['attach'], att_spec)
                 for sw in valid_att_list:
                     ip = sw['ip']
                     want[net_name]['att'][ip] = {
@@ -149,51 +147,6 @@ class DcnmNetwork:
                     }
 
         logit('normalize_inputs: want: %s' %self.want)
-
-    def validate_list_of_dicts(self, param_list, spec): # Move this into common ****
-        """ Validate playbook entries and normalize the playbook values. """
-        v = validation
-        normalized = []
-        invalid_params = []
-        for list_entry in param_list:
-            # TBD: can net_id be blank? i.e. allow dcnm to generate net_id; or if playbook
-            # doesn't list it can I assume it exists and get it from the 'have' data?
-            valid_params_dict = {}
-            for param in spec:
-                item = list_entry.get(param)
-                if item is None:
-                    if spec[param].get('required'):
-                        invalid_params.append('{} : Required parameter not found'.format(item))
-                    else:
-                        item = spec[param].get('default')
-                else:
-                    type = spec[param].get('type')
-                    if type == 'str':
-                        item = v.check_type_str(item)
-                    elif type == 'int':
-                        item = v.check_type_int(item)
-                    elif type == 'bool':
-                        item = v.check_type_bool(item)
-                    elif type == 'list':
-                        item = v.check_type_list(item)
-                    elif type == 'dict':
-                        item = v.check_type_dict(item)
-                    elif type == 'ipv4':
-                        address = item.split('/')[0]
-                        try:
-                            socket.inet_aton(address)
-                        except socket.error:
-                            invalid_params.append('{} : Invalid IPv4 address syntax'.format(item))
-                        if address.count('.') != 3:
-                            invalid_params.append('{} : Invalid IPv4 address syntax'.format(item))
-                valid_params_dict[param] = item
-            normalized.append(valid_params_dict)
-
-        if invalid_params:
-            msg = 'Invalid parameters in playbook: {}'.format('\n'.join(invalid_params))
-            raise Exception(msg)
-
-        return(normalized)
 
     def populate_have(self):
         """Check for existing networks and attached states.
@@ -538,10 +491,10 @@ def main():
     elif state == 'deleted':
         facts.deleted()
     elif state == 'merged':
-        # import epdb;epdb.serve()
         # for f in facts['have']:  ## TEST CODE ONLY - REMOVES NET FOR MERGED TESTING
         #     deleted(facts)  ## REMOVEME
 
+        import epdb;epdb.serve()
         facts.merged() ### REFACTOR TO USE BULK CREATE/ATTACH
 
     # import epdb;epdb.serve()
