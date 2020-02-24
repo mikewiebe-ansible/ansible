@@ -62,27 +62,6 @@ def logit(msg):
     with open('/tmp/logit.txt', 'a') as of:
         of.write("\n---- _network: %s\n" % (msg))
 
-# def send(facts, method, path, payload=None):
-#     logit('send: path: %s' %path)
-#     if payload:
-#         resp = facts['conn'].send_request(method, path, payload)
-#     else:
-#         resp = facts['conn'].send_request(method, path)
-#     # for code: 200 we don't get a response body. Can we get the code at least?
-#     # logit('### send:resp: %s ' %resp)
-#     if isinstance(resp, dict):
-#         return resp
-#     elif isinstance(resp, list):
-#         if resp[0].get('ERROR') == 'Bad Request':
-#             # object does not exist
-#             return {}
-#         else:
-#             return resp
-#     else:
-#         logit('#### send: exception: %s' %resp)
-#         import epdb;epdb.serve()
-#         raise Exception('foo')
-
 class DcnmNetwork:
 
     def __init__(self, module):
