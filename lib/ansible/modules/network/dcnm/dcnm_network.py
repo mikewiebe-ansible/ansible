@@ -70,23 +70,37 @@ class DcnmNetwork:
         self.state = module.params['state']
         self.fabric = module.params['fabric']
         self.config = module.params['config']
-        self.sn = get_fabric_inventory_details(module, self.fabric)
-        self.have = dict()
-        self.want = dict()
-        self.diff = dict()
+        self.have_net = dict()
+        self.have_att = dict()
+        self.have_dep = dict()
+        self.want_net = dict()
+        self.want_att = dict()
+        self.want_dep = dict()
+        self.diff_net = dict()
+        self.diff_att = dict()
+        self.diff_dep = dict()
 
-        self.normalize_inputs()
-        self.populate_have()
-        self.get_diffs()
+        self.ip_sn = self.get_ip_sn()
+        self.get_want()
+        self.get_have()
 
-    def normalize_inputs(self):
+    def get_ip_sn(self):
+        # TBD: Requires that fabric exist in dcnm.
+        inv = get_fabric_inventory_details(self.module, self.fabric)
+        if inv:
+            return inv
+        else:
+            self.module.fail_json(msg="fabric '{}' does not exist or no devices present in fabric".format(self.fabric))
+
+    def validate_input(self):
+        """Parse the playbook values, validate and normalize to param specs."""
         net_spec = dict(
             net_name=dict(required=True, type='str'),
             net_id=dict(required=True, type='int'),
             vrf=dict(required=True, type='str'),
             #
             attach=dict(type='list'),
-            deploy_net=dict(type='bool'),
+            deploy=dict(type='bool'),
             gw_ip=dict(type='ipv4'),
             vlan_id=dict(type='int'),
             template=dict(type='str', default='Default_Network_Universal'),
@@ -98,38 +112,63 @@ class DcnmNetwork:
             ports=dict(required=True, type='list'),
             deploy=dict(type='bool', default=True)
         )
-        want = self.want
-        valid_net_list = validate_list_of_dicts(self.config, net_spec)
-        # Create a dict of net data
-        for i in valid_net_list:
-            net_name = i['net_name']
-            want[net_name] = {}
-            want[net_name]['net'] = {
-                'fabric': self.fabric,
-                'net_id': i['net_id'],
-                'gw_ip': i['gw_ip'],
-                'vlan_id': i['vlan_id'],
-                'vrf': i['vrf'],
-                'template': i['template'],
-                'template_ext': i['template_ext']
-            }
+        validated = []
+        # Validate net params
+        valid_net, invalid_params = validate_list_of_dicts(self.config, net_spec)
+        for net in valid_net:
+            # TBD: add'l net validation may occur here; e.g. vrf name length, etc
+            # Validate attach params
+            if net.get('attach'):
+                valid_att, invalid_att = validate_list_of_dicts(net['attach'], att_spec)
+                # TBD: add'l att validation may occur here
+                net['attach'] = valid_att
+                invalid_params.extend(invalid_att)
+            validated.append(net)
+
+        if invalid_params:
+            msg = 'Invalid parameters in playbook: {}'.format('\n'.join(invalid_params))
+            raise Exception(msg)
+
+        # logit('validated: %s' %validated)
+        return validated
+
+    def get_want(self):
+        validated = self.validate_input()
+        for net in validated:
+            net_name = net['net_name']
+            want = dict(
+                fabric=self.fabric,
+                networkName=net_name,
+                networkId=net['net_id'],
+                gatewayIpAddress=net['gw_ip'],
+                vlanId=net['vlan_id'],
+                vrf=net['vrf'],
+                networkTemplate=net['template'],
+                networkExtensionTemplate=net['template_ext'],
+            )
+            self.want_net.update({ net_name: want })
             # Create a dict of att data
-            if i['attach']:
-                want[net_name]['att'] = {}
-                valid_att_list = validate_list_of_dicts(i['attach'], att_spec)
-                for sw in valid_att_list:
-                    ip = sw['ip']
-                    want[net_name]['att'][ip] = {
-                        'switch_name': sw['switch_name'],
-                        'ports': sw['ports'],
-                        'deploy': sw['deploy'],
-                    }
+            if net['attach']:
+                attach = []
+                for device in net['attach']:
+                    att = dict(
+                        fabric=self.fabric,
+                        networkName=net_name,
+                        # switchName=switch_name,
+                        serialNumber=self.ip_sn[device['ip']],
+                        switchPorts=(',').join(device['ports']),
+                        detachSwitchPorts='',
+                        deploy=device['deploy'],
+                    )
+                    attach.append(att)
+                self.want_att.update({ net_name: attach })
 
-        logit('normalize_inputs: want: %s' %self.want)
+            self.want_dep = net['deploy']
 
-    def populate_have(self):
+        logit('get_want: net: %s\natt: %s\ndep: %s' %(self.want_net, self.want_att, self.want_dep))
+
+    def get_have(self):
         """Check for existing networks and attached states.
-        ** facts db structure: facts[have|want][netwrk1,netwrk2,...][net|att]
         """
         # GET all networks
         path = '/rest/top-down/fabrics/{}/networks'.format(self.fabric)
@@ -137,76 +176,43 @@ class DcnmNetwork:
         if resp['RETURN_CODE'] != 200:
             raise Exception('TBD')
 
-        all_net_raw = resp['DATA']
-        if all_net_raw:
-            # GET all attach states for networks found above (there may be none)
-            all_net_names = ','.join([ k['networkName'] for k in all_net_raw ])
+        all_nets = resp['DATA']
+        if all_nets:
+            # Create a list of nets to GET all attach states for networks
+            # found above (there may be none)
+            all_net_names = ','.join([ k['networkName'] for k in all_nets ])
             path += '/attachments?network-names={}'.format(all_net_names)
             resp = dcnm_send(self.module, 'GET', path)
             if resp['RETURN_CODE'] != 200:
                 raise Exception('TBD')
-            all_att_raw = resp['DATA']
-            logit('all_att_raw: %s' %all_att_raw)
+            all_attach = resp['DATA']
+            logit('all_attach: %s' %all_attach)
 
-        have = self.have
         # Update 'have' facts dict with current net/attach/deploy states
-        for net_raw in all_net_raw:
-            name = net_raw['networkName']
-            # import epdb;epdb.serve()
-            have[name] = {}
-            have[name]['net'] = self.render_net(net_raw)
+        for net in all_nets:
+            net_name = net['networkName']
+            template = json.loads(net.get('networkTemplateConfig', {}))
+            net['networkTemplateConfig'] = template
+            self.have_net.update({ net_name: net })
+
             # Get a list of switches that this specific net is attached to.
-            for k in all_att_raw:
-                if k.get('networkName') == name:
-                    att_raw = k.get('lanAttachList', [])
+            for attach in all_attach:
+                if attach.get('networkName') == net_name:
+                    attached_devices = attach.get('lanAttachList')
                     break
             else:
-                att_raw = []
-            have[name]['att'] = self.render_att(att_raw)
+                attached_devices = []
+            if attached_devices:
+                normalized = []
+                for device in attached_devices:
+                    deploy = True if (device.get('lanAttachState') in ['DEPLOYED', 'PENDING']) else False
+                    device['deploy'] = deploy
+                    normalized.append(device)
+                self.have_att.update({ net_name: normalized})
 
-        # TBD: NEED THIS? it's the net deploy state, not the attach deploy state
-        # have[name]['dep'] = net_raw.get('networkStatus')
-        # import epdb;epdb.serve()
+            logit('have_att:%s: %s' %(net_name, self.have_att))
+            # import epdb;epdb.serve()
 
-    def render_net(self, net_raw):
-        # Select & normalize 'have' network data.
-        # net_raw is a json-syntax dict
-        logit('net raw: %s' %net_raw)
-        cfg = json.loads(net_raw.get('networkTemplateConfig', {}))
-        net = {
-           'fabric': net_raw['fabric'],
-           'template': net_raw['networkTemplate'],
-           'template_ext': net_raw['networkExtensionTemplate'],
-           'net_name': cfg.get('networkName'),
-           'net_id': cfg.get('networkId'),
-           'vlan_id': cfg.get('vlanId'),
-           'vrf': cfg.get('vrf'),
-           'gw_ip': cfg.get('gatewayIpAddress'),
-        }
-        for k in ['net_id', 'vlan_id']:
-            net[k] = int(net[k]) if net[k] else None # Q: Is None safe here?
-
-        logit('render_net:%s: %s' %(net['net_name'], net))
-        return(net)
-
-    def render_att(self, att_raw):
-        # Select & normalize 'have' attach data.
-        # att_raw is a list of switch dicts.
-        # Return an 'att' dict which contains switch dicts
-        logit('att raw: %s' %att_raw)
-        att = {}
-        for sw in att_raw:
-            ports = sw.get('portNames', '')
-            ports = ports.split(',') if ports else []
-            deploy = True if (sw.get('lanAttachState') in ['DEPLOYED', 'PENDING']) else False
-            ip = sw.get('ipAddress')   # TBD: guaranteed to always have ip??
-            att[ip] = {
-                'switch_name': sw.get('switchName'),
-                'ports': ports,
-                'deploy': deploy,
-            }
-            logit('render_att:%s: %s' %(ip, att))
-        return att
         # sample_att_raw = [    #### REMOVEME
         #     {'networkName': 'c1', 'switchName': 'dt-n9k5-1', 'switchRole': 'leaf',
         #      'fabricName': 'cvh4', 'lanAttachState': 'DEPLOYED', 'isLanAttached': True,
@@ -214,74 +220,118 @@ class DcnmNetwork:
         #      'switchDbId': 389920, 'ipAddress': '10.122.197.192', 'networkId': 30001,
         #      'vlanId': 2301}]
 
-    def get_diffs(self):
-        """ Create diffs for each network in 'want'
-        """
-        ##### WIP: ...
-        # Due to the way the api's work, we can't really make incremental changes
-        # to the objects since the payload requires a number of mandatory items.
-        # That makes this diff data somewhat unnecessary since we really just
-        # need to know whether anything has changed and then send the entire
-        # 'want' payload regardless. May need to revisit this...
-        for net_name in self.want.keys():
-            for data_type in ['net', 'att']:
-                # deploy = want['deploy']
-
-                have = self.have.get(net_name, {}).get(data_type, {})
-                want = self.want.get(net_name, {}).get(data_type, {})
-
-                diff = dict_diff(have, want)
-                if diff:
-                    self.diff.setdefault(net_name, {})
-                    self.diff[net_name][data_type] = diff
-                logit('get_diffs: %s: %s\nhave: %s\nwant: %s\nself.diff: %s' %(net_name, data_type, have, want, self.diff))
-
-        # import epdb;epdb.serve()
-
     def query(self):
         """Create a yaml-formatted string of current 'have' data.
         """
         # ** TBD: This report includes all networks in the fabric. **
         # **      Should this only look at the networks found in the playbook?? **
-        # have[name][net]
-        # have[name][att][ip]
-        have = self.have
-        net_keys = ['net_id', 'vrf', 'vlan_id', 'gw_ip']
-        att_keys = ['name', 'ports', 'deploy']
-        # Consider: do not display when arg set to default?
+        x_net = dict(
+            net_id='networkId',
+            vlan_id='vlanId',
+            vrf='vrf',
+            gw_ip='gatewayIpAddress',
+        )
+        x_att = dict(
+            # switch_name='switchName',
+            ports='portNames',
+            deploy='deploy',
+        )
         rpt = dedent('''\
         tasks:
           dcnm_network:
             fabric: {}
             config:''').format(self.fabric)
-        for name in have.keys():
-            net = have[name].get('net')
-            rpt += '\n    - net_name: {}'.format(name)
-            for k in net_keys:
-                if net.get(k) is not None:  ## TBD: assumes always exists. safe?
-                    rpt += '\n      {}: {}'.format(k, net[k])
-            att = have[name].get('att')
-            if att:
+        have_net = self.have_net
+        have_att = self.have_att
+        for net_name in have_net.keys():
+            net = have_net[net_name]
+            rpt += '\n    - net_name: {}'.format(net_name)
+            for k in x_net.keys():
+                if net.get(x_net[k]) is not None:  ## TBD: assumes always exists. safe?
+                    rpt += '\n      {}: {}'.format(k, net[x_net[k]])
+            attach_list = have_att.get(net_name)
+            if attach_list:
                 rpt += '\n      attach:'
-                for ip in att.keys():
-                    rpt += '\n        - ip: {}'.format(ip)
-                    for k in att_keys:
-                        if att[ip].get(k) is not None:
-                            rpt += '\n          {}: {}'.format(k, att[ip][k])
+                for device in attach_list:
+                    rpt += '\n        - ip: {}'.format(device['ipaddress'])
+                    for k in x_att.keys():
+                        if device.get(x_att[k]) is not none:
+                            rpt += '\n          {}: {}'.format(k, device[x_att[k]])
         logit('rpt: %s' %rpt)
         # import epdb;epdb.serve()
         self.response = rpt
 
     def deleted(self):
-        # Todo: global purge when config null.
-        # TODO: check attach state; also need to deploy change to devices
-        ### FIXME: needs to handle multiple nets
-        for net_name in self.want.keys():
+        # todo: global purge when config null.
+        # todo: check attach state; also need to deploy change to devices
+        responses = []
+        for net_name in self.want_net.keys():
             path = '/rest/top-down/fabrics/{}/networks/{}'.format(self.fabric, net_name)
-            import epdb;epdb.serve()
             resp = dcnm_send(self.module, 'DELETE', path)
-            logit('delete:response: %s' %resp)
-        self.response = resp  ## NEEDS list of per-network results
+            # error checking...
+            responses.append(resp)
+        self.response = responses
+        # import epdb;epdb.serve()
+
+    def merged(self):
+        pass
+
+def main():
+    """ main entry point for module execution
+    """
+    element_spec = dict(
+        state=dict(type='str', default='merged'),
+        fabric=dict(required=True, type='str'),
+        config=dict(required=True, type=list),
+    )
+    module = AnsibleModule(argument_spec=element_spec,
+                           # required_one_of=required_one_of,
+                           # mutually_exclusive=mutually_exclusive,
+                           supports_check_mode=True)
+
+    # facts = DcnmNetwork(module, Connection(module._socket_path))
+    facts = DcnmNetwork(module)
+    # TODO: Add checkmode support
+
+    # WIP BELOW THIS POINT
+    result = dict(changed=False, response=dict())
+    state = module.params['state']
+    if state == 'query':
+        facts.query()
+        # Q: what is the proper way to return this output to user?
+
+    elif state == 'deleted':
+        facts.deleted()
+
+    elif state == 'merged':
+        # for f in facts['have']:  ## TEST CODE ONLY - REMOVES NET FOR MERGED TESTING
+        #     deleted(facts)  ## REMOVEME
+        facts.merged() ### REFACTOR TO USE BULK CREATE/ATTACH
+
+    # import epdb;epdb.serve()
+    result['response'] = facts.response
+    module.exit_json(**result)
+
+
+if __name__ == '__main__':
+    main()
+
+# TBD:
+# NET_ATTRS = {
+#     "networkTemplate": "network_template",
+#     "networkExtensionTemplate": "network_extension_template",
+#     # "networkTemplateConfig": "network_template_config",
+#     "networkId": "network_id",
+# }
+
+    # NET FACTS
+    # { "fabric": "cvh3", "networkName": "c1", "displayName": "c1", "networkId": 31120,
+    # "networkTemplate": "Default_Network_Universal", "networkExtensionTemplate": "Default_Network_Extension_Universal",
+    # "networkTemplateConfig": "{\"suppressArp\":\"false\",\"secondaryGW2\":\"\",\"secondaryGW1\":\"\",\"loopbackId\":\"\",\"vlanId\":\"2308\",\"gatewayIpAddress\":\"\",\"enableL3OnBorder\":\"false\",\"networkName\":\"c1\",\"vlanName\":\"\",\"enableIR\":\"false\",\"mtu\":\"\",\"rtBothAuto\":\"false\",\"isLayer2Only\":\"false\",\"intfDescription\":\"\",\"segmentId\":\"31120\",\"mcastGroup\":\"239.1.1.3\",\"gatewayIpV6Address\":\"\",\"trmEnabled\":\"false\",\"dhcpServerAddr2\":\"\",\"dhcpServerAddr1\":\"\",\"tag\":\"12345\",\"nveId\":\"1\",\"vrfDhcp\":\"\",\"vrfName\":\"MyVRF_50000\"}",
+    # "vrf": "MyVRF_50000", "serviceNetworkTemplate": null, "source": null }
+
+    # ATTACH FACTS
+    # [{"networkName":"c1","lanAttachList":[{"networkName":"c1","switchName":"dt-n9k5-1","switchRole":"leaf","fabricName":"cvh3","lanAttachState":"PENDING","isLanAttached":true,"portNames":"Ethernet1/5","switchSerialNo":"SAL1821T9EF","switchDbId":336700,"ipAddress":"10.122.197.192","networkId":31120,"vlanId":2308}]}]
 
     # def merged(self):
     #     ############ WIP ##############
@@ -443,60 +493,27 @@ class DcnmNetwork:
     #     # import epdb;epdb.serve()
     #     return attach_list
     #
-def main():
-    """ main entry point for module execution
-    """
-    element_spec = dict(
-        state=dict(type='str', default='merged'),
-        fabric=dict(required=True, type='str'),
-        config=dict(required=True, type=list),
-    )
-    module = AnsibleModule(argument_spec=element_spec,
-                           # required_one_of=required_one_of,
-                           # mutually_exclusive=mutually_exclusive,
-                           supports_check_mode=True)
-
-    # facts = DcnmNetwork(module, Connection(module._socket_path))
-    facts = DcnmNetwork(module)
-    # TODO: Add checkmode support
-
-    # WIP BELOW THIS POINT
-    result = dict(changed=False, response=dict())
-    state = module.params['state']
-    if state == 'query':
-        # Return a playbook yaml report of 'have' data.
-        facts.query()
-        # Q: what is the proper way to return this output to user?
-    elif state == 'deleted':
-        facts.deleted()
-    elif state == 'merged':
-        # for f in facts['have']:  ## TEST CODE ONLY - REMOVES NET FOR MERGED TESTING
-        #     deleted(facts)  ## REMOVEME
-
-        import epdb;epdb.serve()
-        facts.merged() ### REFACTOR TO USE BULK CREATE/ATTACH
-
-    # import epdb;epdb.serve()
-    result['response'] = facts.response
-    module.exit_json(**result)
-
-
-if __name__ == '__main__':
-    main()
-
-# TBD:
-# NET_ATTRS = {
-#     "networkTemplate": "network_template",
-#     "networkExtensionTemplate": "network_extension_template",
-#     # "networkTemplateConfig": "network_template_config",
-#     "networkId": "network_id",
-# }
-
-    # NET FACTS
-    # { "fabric": "cvh3", "networkName": "c1", "displayName": "c1", "networkId": 31120,
-    # "networkTemplate": "Default_Network_Universal", "networkExtensionTemplate": "Default_Network_Extension_Universal",
-    # "networkTemplateConfig": "{\"suppressArp\":\"false\",\"secondaryGW2\":\"\",\"secondaryGW1\":\"\",\"loopbackId\":\"\",\"vlanId\":\"2308\",\"gatewayIpAddress\":\"\",\"enableL3OnBorder\":\"false\",\"networkName\":\"c1\",\"vlanName\":\"\",\"enableIR\":\"false\",\"mtu\":\"\",\"rtBothAuto\":\"false\",\"isLayer2Only\":\"false\",\"intfDescription\":\"\",\"segmentId\":\"31120\",\"mcastGroup\":\"239.1.1.3\",\"gatewayIpV6Address\":\"\",\"trmEnabled\":\"false\",\"dhcpServerAddr2\":\"\",\"dhcpServerAddr1\":\"\",\"tag\":\"12345\",\"nveId\":\"1\",\"vrfDhcp\":\"\",\"vrfName\":\"MyVRF_50000\"}",
-    # "vrf": "MyVRF_50000", "serviceNetworkTemplate": null, "source": null }
-
-    # ATTACH FACTS
-    # [{"networkName":"c1","lanAttachList":[{"networkName":"c1","switchName":"dt-n9k5-1","switchRole":"leaf","fabricName":"cvh3","lanAttachState":"PENDING","isLanAttached":true,"portNames":"Ethernet1/5","switchSerialNo":"SAL1821T9EF","switchDbId":336700,"ipAddress":"10.122.197.192","networkId":31120,"vlanId":2308}]}]
+    # def get_diffs(self):
+    #     """ Create diffs for each network in 'want'
+    #     """
+    #     ##### WIP: ...
+    #     # Due to the way the api's work, we can't really make incremental changes
+    #     # to the objects since the payload requires a number of mandatory items.
+    #     # That makes this diff data somewhat unnecessary since we really just
+    #     # need to know whether anything has changed and then send the entire
+    #     # 'want' payload regardless. May need to revisit this...
+    #     for net_name in self.want.keys():
+    #         for data_type in ['net', 'att']:
+    #             # deploy = want['deploy']
+    #
+    #             have = self.have.get(net_name, {}).get(data_type, {})
+    #             want = self.want.get(net_name, {}).get(data_type, {})
+    #
+    #             diff = dict_diff(have, want)
+    #             if diff:
+    #                 self.diff.setdefault(net_name, {})
+    #                 self.diff[net_name][data_type] = diff
+    #             logit('get_diffs: %s: %s\nhave: %s\nwant: %s\nself.diff: %s' %(net_name, data_type, have, want, self.diff))
+    #
+    #     # import epdb;epdb.serve()
+    #
