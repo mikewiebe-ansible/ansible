@@ -357,7 +357,10 @@ def get_have(facts, module):
             del attach['ipAddress']
             del attach['lanAttachState']
             del attach['isLanAttached']
+            del attach['vrfId']
+            del attach['fabricName']
 
+            attach.update({'fabric': fabric})
             attach.update({'vlan': vlan})
             attach.update({'serialNumber': sn})
             attach.update({'deployment': deploy})
@@ -430,46 +433,114 @@ def get_want(facts, ip_sn):
     return want_create, want_attach, want_deploy
 
 
+def get_diff_override(facts):
+    # overridden:
+    # DCNM should reflect exactly like the play.
+    # The vrfs and their attachments not present in the play should be removed from DCNM if present there.
+    # The vrfs and their attachments present in the play should replace whats there on DCNM if present there
+
+    all_vrfs = ''
+    want_create = facts['want_create']
+    have_attach = facts['have_attach']
+    diff_delete = list()
+
+    diff_create, diff_attach, diff_deploy = get_diff_replace(facts)
+
+    for have_a in have_attach:
+        found = next((vrf for vrf in want_create if vrf['vrfName'] == have_a['vrfName']), None)
+
+        to_del = list()
+        if not found:
+            atch_h = have_a['lanAttachList']
+            for a_h in atch_h:
+                if a_h['isAttached']:
+                    del a_h['isAttached']
+                    a_h.update({'deployment': False})
+                    to_del.append(a_h)
+
+            if to_del:
+                have_a.update({'lanAttachList':to_del})
+                diff_attach.append(have_a)
+                all_vrfs += have_a['vrfName'] + ","
+
+            diff_delete.append(have_a['vrfName'])
+
+    if all_vrfs:
+        vrfs = (diff_deploy['vrfNames'] + "," + all_vrfs[:-1]) if diff_deploy else all_vrfs[:-1]
+        diff_deploy.update({'vrfNames': vrfs})
+
+    logit(json.dumps(diff_create, indent=4, sort_keys=True))
+    logit(json.dumps(diff_attach, indent=4, sort_keys=True))
+    logit(json.dumps(diff_deploy, indent=4, sort_keys=True))
+    logit(json.dumps(diff_delete, indent=4, sort_keys=True))
+
+    return diff_create, diff_attach, diff_deploy, diff_delete
+
+
 def get_diff_replace(facts):
     all_vrfs = ''
     diff_create, diff_attach, diff_deploy = get_diff_merge(facts)
 
     want_create = facts['want_create']
+    want_attach = facts['want_attach']
     have_attach = facts['have_attach']
 
     for have_a in have_attach:
-        found = False
-        for want_a in want_create:
+        r_vrf_list = list()
+        h_in_w = False
+        for want_a in want_attach:
             if have_a['vrfName'] == want_a['vrfName']:
-                for diff_a in diff_attach:
-                    if have_a['vrfName'] == diff_a['vrfName']:
-                        found = True
-                        # the vrf is present in both have and diff.
-                        # Need to check if the attach list is different or same.
-                        # if attach list has items in have which are not in diff, detach and deploy
-                        atch_h = have_a['lanAttachList']
-                        atch_d = diff_a['lanAttachList']
-                        for a_h in atch_h:
-                            for a_d in atch_d:
-                                if a_h['serialNumber'] == a_d['serialNumber']:
-                                    a_h.update({'deployment': False})
-                                    atch_d.append(a_h)
-                                    break
+                h_in_w = True
+                atch_h = have_a['lanAttachList']
+                atch_w = want_a.get('lanAttachList')
+
+                for a_h in atch_h:
+                    if not a_h['isAttached']:
                         continue
-                    if found:
+                    a_match = False
+
+                    if atch_w:
+                        for a_w in atch_w:
+                            if a_h['serialNumber'] == a_w['serialNumber']:
+                                # Have is already in diff, no need to continue looking for it.
+                                a_match = True
+                                break
+                    if not a_match:
+                        del a_h['isAttached']
+                        a_h.update({'deployment': False})
+                        r_vrf_list.append(a_h)
+                break
+
+        if not h_in_w:
+            found = next((vrf for vrf in want_create if vrf['vrfName'] == have_a['vrfName']), None)
+            if found:
+                atch_h = have_a['lanAttachList']
+                for a_h in atch_h:
+                    if not a_h['isAttached']:
                         continue
-        if not found:
-            atch_h = have_a['lanAttachList']
-            for a_h in atch_h:
-                a_h.update({'deployment': False})
-            diff_attach.append(have_a)
-            all_vrfs += have_a['vrfName'] + ","
-            # We need to un-deploy and delete the VRF
+                    del a_h['isAttached']
+                    a_h.update({'deployment': False})
+                    r_vrf_list.append(a_h)
+
+        if r_vrf_list:
+            in_diff = False
+            for d_attach in diff_attach:
+                if have_a['vrfName'] == d_attach['vrfName']:
+                    in_diff = True
+                    d_attach['lanAttachList'].extend(r_vrf_list)
+                    break
+
+            if not in_diff:
+                r_vrf_dict = dict()
+                r_vrf_dict.update({'vrfName':have_a['vrfName']})
+                r_vrf_dict.update({'lanAttachList': r_vrf_list})
+                diff_attach.append(r_vrf_dict)
+                all_vrfs += have_a['vrfName'] + ","
 
     if not all_vrfs:
-        logit(json.dumps(diff_create, indent=4, sort_keys=True))
-        logit(json.dumps(diff_attach, indent=4, sort_keys=True))
-        logit(json.dumps(diff_deploy, indent=4, sort_keys=True))
+        # logit(json.dumps(diff_create, indent=4, sort_keys=True))
+        # logit(json.dumps(diff_attach, indent=4, sort_keys=True))
+        # logit(json.dumps(diff_deploy, indent=4, sort_keys=True))
         return diff_create, diff_attach, diff_deploy
 
     if not diff_deploy:
@@ -478,9 +549,9 @@ def get_diff_replace(facts):
         vrfs = diff_deploy['vrfNames'] + "," + all_vrfs[:-1]
         diff_deploy.update({'vrfNames': vrfs})
 
-    logit(json.dumps(diff_create, indent=4, sort_keys=True))
-    logit(json.dumps(diff_attach, indent=4, sort_keys=True))
-    logit(json.dumps(diff_deploy, indent=4, sort_keys=True))
+    # logit(json.dumps(diff_create, indent=4, sort_keys=True))
+    # logit(json.dumps(diff_attach, indent=4, sort_keys=True))
+    # logit(json.dumps(diff_deploy, indent=4, sort_keys=True))
 
     return diff_create, diff_attach, diff_deploy
 
@@ -556,13 +627,6 @@ def get_diff_merge(facts):
 
 
 def get_diff_delete(facts):
-    diff_create = list()
-    diff_attach = list()
-    diff_deploy = dict()
-    pass
-
-
-def get_diff_override(facts):
     diff_create = list()
     diff_attach = list()
     diff_deploy = dict()
@@ -699,6 +763,7 @@ def main():
         'have_deploy': {},
         'want_deploy': {},
         'diff_deploy': {},
+        'diff_delete': []
     }
 
     ip_sn = get_fabric_inventory_details(module, module.params['fabric'])
@@ -721,39 +786,52 @@ def main():
     if module.params['state'] == 'replaced':
         diff_create, diff_attach, diff_deploy = get_diff_replace(facts)
 
+    if module.params['state'] == 'overridden':
+        diff_create, diff_attach, diff_deploy, diff_delete = get_diff_override(facts)
+
     facts.update({'diff_create': diff_create})
     facts.update({'diff_attach': diff_attach})
     facts.update({'diff_deploy': diff_deploy})
+    facts.update({'diff_delete': diff_delete})
 
-    # fabric = module.params['fabric']
-    #
-    # method = 'POST'
-    # path = '/rest/top-down/fabrics/{}/vrfs'.format(fabric)
-    # bulk_create_path = '/rest/top-down/bulk-create/vrfs'
-    #
-    # if facts['diff_create'] or facts['diff_attach'] or facts['diff_deploy']:
-    #     result['changed'] = True
-    # else:
-    #     module.exit_json(**result)
-    #
-    # if facts['diff_create']:
-    #     result['response'] = dcnm_connection(module, method, bulk_create_path, json.dumps(facts['diff_create']))
-    #     fail, result['changed'] = handle_response(result['response'], "create")
-    #     if fail:
-    #         module.fail_json(msg=result['response'])
-    # if facts['diff_attach']:
-    #     attach_path = path + '/attachments'
-    #     result['response'] = dcnm_connection(module, method, attach_path, json.dumps(facts['diff_attach']))
-    #     fail, result['changed'] = handle_response(result['response'], "attach")
-    #     if fail:
-    #         module.fail_json(msg=result['response'])
-    # if facts['diff_deploy']:
-    #     deploy_path = path + '/deployments'
-    #     result['response'] = dcnm_connection(module, method, deploy_path, json.dumps(facts['diff_deploy']))
-    #     fail, result['changed'] = handle_response(result['response'], "deploy")
-    #     if fail:
-    #         module.fail_json(msg=result['response'])
+    fabric = module.params['fabric']
 
+    method = 'POST'
+    path = '/rest/top-down/fabrics/{}/vrfs'.format(fabric)
+    bulk_create_path = '/rest/top-down/bulk-create/vrfs'
+
+    if facts['diff_create'] or facts['diff_attach'] or facts['diff_deploy']:
+        result['changed'] = True
+    else:
+        module.exit_json(**result)
+
+    if facts['diff_create']:
+        result['response'] = dcnm_connection(module, method, bulk_create_path, json.dumps(facts['diff_create']))
+        fail, result['changed'] = handle_response(result['response'], "create")
+        if fail:
+            module.fail_json(msg=result['response'])
+    if facts['diff_attach']:
+        attach_path = path + '/attachments'
+        result['response'] = dcnm_connection(module, method, attach_path, json.dumps(facts['diff_attach']))
+        fail, result['changed'] = handle_response(result['response'], "attach")
+        if fail:
+            module.fail_json(msg=result['response'])
+    if facts['diff_deploy']:
+        deploy_path = path + '/deployments'
+        result['response'] = dcnm_connection(module, method, deploy_path, json.dumps(facts['diff_deploy']))
+        fail, result['changed'] = handle_response(result['response'], "deploy")
+        if fail:
+            module.fail_json(msg=result['response'])
+    if facts['diff_delete']:
+        method = 'DELETE'
+        logit("HERE........")
+        for vrf in facts['diff_delete']:
+            logit("HERE........1")
+            delete_path = path + "/" + vrf
+            result['response'] = dcnm_connection(module, method, delete_path)
+            fail, result['changed'] = handle_response(result['response'], "delete")
+            if fail:
+                module.fail_json(msg=result['response'])
 
     module.exit_json(**result)
 
