@@ -64,11 +64,7 @@ def validate_list_of_dicts(param_list, spec):
             valid_params_dict[param] = item
         normalized.append(valid_params_dict)
 
-    if invalid_params:
-        msg = 'Invalid parameters in playbook: {}'.format('\n'.join(invalid_params))
-        raise Exception(msg)
-
-    return(normalized)
+    return(normalized, invalid_params)
 
 
 def get_fabric_inventory_details(module, fabric):
