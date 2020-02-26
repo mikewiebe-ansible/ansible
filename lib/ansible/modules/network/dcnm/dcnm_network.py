@@ -17,6 +17,7 @@
 #
 
 import json
+from copy import deepcopy
 from textwrap import dedent
 
 from ansible.module_utils.basic import AnsibleModule
@@ -60,7 +61,7 @@ EXAMPLES = '''
 import datetime
 def logit(msg):
     with open('/tmp/logit.txt', 'a') as of:
-        of.write("\n---- _network: %s\n" % (msg))
+        of.write("\n---- %s\n" % (msg))
 
 class DcnmNetwork:
 
@@ -140,11 +141,22 @@ class DcnmNetwork:
                 fabric=self.fabric,
                 networkName=net_name,
                 networkId=net['net_id'],
-                gatewayIpAddress=net['gw_ip'],
-                vlanId=net['vlan_id'],
-                vrf=net['vrf'],
                 networkTemplate=net['template'],
                 networkExtensionTemplate=net['template_ext'],
+                networkTemplateConfig=dict(
+                    vlanId=net['vlan_id'],
+                    segmentId=net['net_id'],
+                    networkName=net_name,
+                    # mcastGroup=net['mcast_group'],
+                    networkId=net['net_id'],
+                    # trmEnabled=net['foo'],
+                    vrf=net['vrf'],
+                    # enableIR=net['foo'],
+                    # nveId=net['foo'],
+                    gatewayIpAddress=net['gw_ip'],
+                ),
+                # serviceNetworkTemplate='foo',
+                # source='foo',
             )
             self.want_net.update({ net_name: want })
             # Create a dict of att data
@@ -192,6 +204,10 @@ class DcnmNetwork:
         for net in all_nets:
             net_name = net['networkName']
             template = json.loads(net.get('networkTemplateConfig', {}))
+            for k in template:
+                if template[k] and k in ['vlanId', 'segmentId', 'networkId']:
+                    template[k] = int(template[k])
+            # import epdb;edpb.serve()
             net['networkTemplateConfig'] = template
             self.have_net.update({ net_name: net })
 
@@ -274,6 +290,88 @@ class DcnmNetwork:
         # import epdb;epdb.serve()
 
     def merged(self):
+        """ Check for non-idempotent networks, create payloads, update DCNM.
+        """
+        # Use bulk-create for all new networks, use PUT networks for updates.
+        # TBD: if vlan_id is empty then DCNM will automatically pick the next vlan
+        #      from the fabric; however,net_id/VNI can also be automatically
+        #      populated, in which case use POST /rest/managed-pool/fabrics/{{fabric}}/segments/ids
+        #       to get the next avail VNI e.g. get_vni()
+        # TBD: check_mode
+        # TBD: log separate results for each network, each attach, ...?
+        # TBD: create a collective 'resp', carry in facts?
+
+        # Create a list of new networks to bulk-create
+        want_net = self.want_net
+        have_net = self.have_net
+        bulk_create = [ i for i in want_net.keys() if not have_net.get(i) ]
+        if bulk_create:
+            method = 'POST'
+            payload = []
+            for net_name in bulk_create:
+                payload = self.get_payload_net(want_net[net_name])
+                # needs work
+                import epdb;epdb.serve()
+
+        # List of existing net objects to update in DCNM
+        # There is no bulk-update; use a separate payload for each net
+        update_nets = [ i for i in want_net.keys() if have_net.get(i) ]
+        for net_name in update_nets:
+            payload = self.get_payload_net(want_net[net_name], have_net[net_name])
+            if payload:
+                path = '/rest/top-down/fabrics/{}/networks/{}'.format(self.fabric, net_name)
+                resp = dcnm_send(self.module, 'PUT', path, payload)
+                if resp['RETURN_CODE'] != 200:
+                    pass  # TBD: needs apropos error msging
+                logit('resp: %s' %resp)
+        import epdb;epdb.serve()
+
+        # attachments
+        # update_atts = []
+
+        # Deploy
+        # deploy_nets = [ i for i in w]
+
+    def get_payload_net(self, want, have=None):
+        """Diff the want/have net data and return a json-formatted payload.
+        """
+        # Create a diff and return a usable payload
+        diff = dict()
+        if not have:
+            have = dict()
+        net_name = want['networkName']
+        payload = deepcopy(have)
+        for k in want.keys():
+            if k == 'networkTemplateConfig' or want[k] is None: # TBD: safe?
+                continue
+            if want[k] != have.get(k):
+                diff[k] = want[k]
+                payload[k] = want[k]
+
+        w_cfg = want['networkTemplateConfig']
+        h_cfg = have['networkTemplateConfig']
+        for k in w_cfg.keys():
+            if w_cfg[k] is None:
+                continue
+            if w_cfg[k] != h_cfg.get(k):
+                diff.setdefault('networkTemplateConfig', {})
+                diff['networkTemplateConfig'][k] = w_cfg[k]
+                payload.setdefault('networkTemplateConfig', {})
+                payload['networkTemplateConfig'][k] = w_cfg[k]
+
+        if diff:
+            logit('have: %s: %s' %(net_name, have))
+            logit('want: %s: %s' %(net_name, want))
+            logit('diff: %s: %s' %(net_name, diff))
+            self.diff_net[net_name] = diff
+            payload.pop('networkStatus', None)
+            payload['networkTemplateConfig'] = json.dumps(payload['networkTemplateConfig'])
+            payload = json.dumps(payload)
+
+        # logit('get_diff_net:payload: %s' %payload)
+        return payload
+
+    def get_payload_att(self, want, have=None):
         pass
 
 def main():
