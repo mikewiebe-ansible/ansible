@@ -258,6 +258,7 @@ def update_create_params(create, fabric):
     s_v_template = None if not create.get('service_vrf_template') else create['service_vrf_template']
 
 
+
     create_upd = dict()
     create_upd.update({'fabric': fabric})
     create_upd.update({'vrfName': create['vrf_name']})
@@ -725,7 +726,6 @@ def validate_input(params):
 
     return err_m, ret_c
 
-
 def main():
     """ main entry point for module execution
     """
@@ -832,6 +832,7 @@ def main():
             fail, result['changed'] = handle_response(result['response'], "delete")
             if fail:
                 module.fail_json(msg=result['response'])
+
 
     module.exit_json(**result)
 
