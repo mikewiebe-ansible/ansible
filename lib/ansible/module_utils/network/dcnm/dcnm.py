@@ -45,8 +45,22 @@ def validate_list_of_dicts(param_list, spec):
                 type = spec[param].get('type')
                 if type == 'str':
                     item = v.check_type_str(item)
+                    if spec[param].get('length_max'):
+                        if 1 <= len(item) <= spec[param].get('length_max'):
+                            pass
+                        else:
+                            invalid_params.append('{}:{} : The string exceeds the allowed '
+                                                  'range of max {} char'.format(param, item,
+                                                                                spec[param].get('length_max')))
                 elif type == 'int':
                     item = v.check_type_int(item)
+                    if spec[param].get('range_max'):
+                        if 1 <= item <= spec[param].get('range_max'):
+                            pass
+                        else:
+                            invalid_params.append('{}:{} : The item exceeds the allowed '
+                                                  'range of max {}'.format(param, item,
+                                                                           spec[param].get('range_max')))
                 elif type == 'bool':
                     item = v.check_type_bool(item)
                 elif type == 'list':
