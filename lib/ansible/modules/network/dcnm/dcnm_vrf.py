@@ -20,7 +20,6 @@ import json, socket, time #,yaml
 from ansible.module_utils.network.dcnm.dcnm import get_fabric_inventory_details, dcnm_send, validate_list_of_dicts
 from ansible.module_utils.connection import Connection
 from ansible.module_utils.basic import AnsibleModule
-from textwrap import dedent
 
 
 __copyright__ = "Copyright (c) 2020 Cisco and/or its affiliates."
@@ -271,7 +270,7 @@ class DcnmVrf:
         self.module = module
         self.params = module.params
         self.fabric = module.params['fabric']
-        self.config = module.params['config']
+        self.config = module.params.get('config')
         self.check_mode = False
         self.conn = Connection(module._socket_path)
         self.have_create = []
@@ -361,7 +360,7 @@ class DcnmVrf:
         if not have:
             create = want
         else:
-            if have['vrfId'] != want['vrfId']:  # Was thinking of moving it out, try to remember why...
+            if have['vrfId'] != want['vrfId']:
                 logit("diff_for_create - VRF ID cant be updated to a different value")
                 pass
                 # module.exit_json("Can not update the VRF ID") # need to find a proper way to err
@@ -654,10 +653,10 @@ class DcnmVrf:
             vrfs = (diff_deploy['vrfNames'] + "," + all_vrfs[:-1]) if diff_deploy else all_vrfs[:-1]
             diff_deploy.update({'vrfNames': vrfs})
 
-        logit(json.dumps(diff_create, indent=4, sort_keys=True))
-        logit(json.dumps(diff_attach, indent=4, sort_keys=True))
-        logit(json.dumps(diff_deploy, indent=4, sort_keys=True))
-        logit(json.dumps(diff_delete, indent=4, sort_keys=True))
+        # logit(json.dumps(diff_create, indent=4, sort_keys=True))
+        # logit(json.dumps(diff_attach, indent=4, sort_keys=True))
+        # logit(json.dumps(diff_deploy, indent=4, sort_keys=True))
+        # logit(json.dumps(diff_delete, indent=4, sort_keys=True))
 
         self.diff_create = diff_create
         self.diff_attach = diff_attach
@@ -806,9 +805,9 @@ class DcnmVrf:
         if all_vrfs:
             diff_deploy.update({'vrfNames': all_vrfs[:-1]})
 
-        logit(json.dumps(diff_create, indent=4, sort_keys=True))
-        logit(json.dumps(diff_attach, indent=4, sort_keys=True))
-        logit(json.dumps(diff_deploy, indent=4, sort_keys=True))
+        # logit(json.dumps(diff_create, indent=4, sort_keys=True))
+        # logit(json.dumps(diff_attach, indent=4, sort_keys=True))
+        # logit(json.dumps(diff_deploy, indent=4, sort_keys=True))
 
         self.diff_create = diff_create
         self.diff_attach = diff_attach
@@ -941,18 +940,19 @@ class DcnmVrf:
         if msg:
             raise Exception(msg)
 
-        validated = []
-        valid_vrf, invalid_params = validate_list_of_dicts(self.config, vrf_spec)
-        for vrf in valid_vrf:
-            if vrf.get('attach'):
-                valid_att, invalid_att = validate_list_of_dicts(vrf['attach'], att_spec)
-                vrf['attach'] = valid_att
-                invalid_params.extend(invalid_att)
-            validated.append(vrf)
+        if self.config:
+            validated = []
+            valid_vrf, invalid_params = validate_list_of_dicts(self.config, vrf_spec)
+            for vrf in valid_vrf:
+                if vrf.get('attach'):
+                    valid_att, invalid_att = validate_list_of_dicts(vrf['attach'], att_spec)
+                    vrf['attach'] = valid_att
+                    invalid_params.extend(invalid_att)
+                validated.append(vrf)
 
-        if invalid_params:
-            msg = 'Invalid parameters in playbook: {}'.format('\n'.join(invalid_params))
-            raise Exception(msg)
+            if invalid_params:
+                msg = 'Invalid parameters in playbook: {}'.format('\n'.join(invalid_params))
+                raise Exception(msg)
 
 
     def handle_response(self, res, op):
