@@ -16,7 +16,7 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-import json, socket, yaml, time
+import json, socket, time #,yaml
 from ansible.module_utils.network.dcnm.dcnm import get_fabric_inventory_details, dcnm_send, validate_list_of_dicts
 from ansible.module_utils.connection import Connection
 from ansible.module_utils.basic import AnsibleModule
@@ -284,7 +284,7 @@ class DcnmVrf:
         self.want_deploy = {}
         self.diff_deploy = {}
         self.diff_delete = {}
-        self.query = ''
+        self.query = []
         self.ip_sn = get_fabric_inventory_details(self.module, self.fabric)
 
 
@@ -817,69 +817,61 @@ class DcnmVrf:
 
     def get_diff_query(self):
 
-        query_create = list()
-        query_attach = list()
-
-        rpt = dedent('''\
-                    tasks:
-                      dcnm_network:
-                        fabric: {}
-                        config:''').format(self.fabric)
+        query = list()
 
         for want_c in self.want_create:
             found_c = (next((vrf for vrf in self.have_create if vrf['vrfName'] == want_c['vrfName']), None)).copy()
             found_a = next((vrf for vrf in self.have_attach if vrf['vrfName'] == want_c['vrfName']), None)
+            found_w = next((vrf for vrf in self.want_attach if vrf['vrfName'] == want_c['vrfName']), None)
 
             src = found_c['source']
             found_c.update({'vrf_name': found_c['vrfName']})
             found_c.update({'vrf_id': found_c['vrfId']})
             found_c.update({'vrf_template': found_c['vrfTemplate']})
             found_c.update({'vrf_extension_template': found_c['vrfExtensionTemplate']})
-            # del found_c['source']
+            del found_c['source']
             found_c.update({'source': src})
             found_c.update({'service_vrf_template': found_c['serviceVrfTemplate']})
             found_c.update({'attach': list()})
 
-            # del found_c['fabric']
-            # del found_c['vrfName']
-            # del found_c['vrfId']
-            # del found_c['vrfTemplate']
-            # del found_c['vrfExtensionTemplate']
-            # del found_c['serviceVrfTemplate']
-            # del found_c['vrfTemplateConfig']
+            del found_c['fabric']
+            del found_c['vrfName']
+            del found_c['vrfId']
+            del found_c['vrfTemplate']
+            del found_c['vrfExtensionTemplate']
+            del found_c['serviceVrfTemplate']
+            del found_c['vrfTemplateConfig']
 
-            rpt += '\n    - vrf_name: {}'.format(found_c['vrfName'])
-            rpt += '\n      vrf_id: {}'.format(found_c['vrfId'])
-            rpt += '\n      vrf_template: {}'.format(found_c['vrf_template'])
-            rpt += '\n      vrf_extension_template: {}'.format(found_c['vrf_extension_template'])
-            rpt += '\n      source: {}'.format(found_c['source'])
-            rpt += '\n      vrf_name: {}'.format(found_c['vrfName'])
-            rpt += '\n      service_vrf_template: {}'.format(found_c['serviceVrfTemplate'])
-            rpt += '\n      attach:'
+            if  not found_w:
+                query.append(found_c)
+                continue
 
+            attach_w = found_w['lanAttachList']
             attach_l = found_a['lanAttachList']
-            query_attach.append(found_a)
 
-            for a_l in attach_l:
+            for a_w in attach_w:
                 attach_d = dict()
-                for k, v in self.ip_sn.items():
-                    if v == a_l['serialNumber']:
-                        attach_d.update({'ip_address': k})
+                serial = a_w['serialNumber']
+                found = False
+                for a_l in attach_l:
+                    if a_l['serialNumber'] == serial:
+                        found = True
                         break
-                attach_d.update({'vlan_id': a_l['vlan']})
-                attach_d.update({'deploy': a_l['isAttached']})
-                found_c['attach'].append(attach_d)
-                rpt += '\n        - ip_address: {}'.format(k)
-                rpt += '\n          vlan_id: {}'.format(a_l['vlan'])
-                rpt += '\n          deploy: {}'.format(a_l['isAttached'])
 
-            query_create.append(found_c)
+                if found:
+                    for k, v in self.ip_sn.items():
+                        if v == a_l['serialNumber']:
+                            attach_d.update({'ip_address': k})
+                            break
+                    attach_d.update({'vlan_id': a_l['vlan']})
+                    attach_d.update({'deploy': a_l['isAttached']})
+                    found_c['attach'].append(attach_d)
 
-        self.query = rpt
+            if attach_d:
+                query.append(found_c)
 
-        logit('rpt: %s' % rpt)
-        # logit(yaml.dump(query_attach))
-        # logit(yaml.dump(have_deploy))
+        self.query = query
+        # logit(json.dumps(query, indent=4))
 
 
     def wait_for_vrf_del_ready(self):
