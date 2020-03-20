@@ -18,7 +18,6 @@
 
 import json, socket, time
 from ansible.module_utils.network.dcnm.dcnm import get_fabric_inventory_details, dcnm_send, validate_list_of_dicts
-from ansible.module_utils.connection import Connection
 from ansible.module_utils.basic import AnsibleModule
 
 
@@ -266,7 +265,6 @@ class DcnmVrf:
         self.fabric = module.params['fabric']
         self.config = module.params.get('config')
         self.check_mode = False
-        self.conn = Connection(module._socket_path)
         self.have_create = []
         self.want_create = []
         self.diff_create = []
