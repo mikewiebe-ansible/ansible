@@ -22,177 +22,46 @@ __metaclass__ = type
 from units.compat.mock import patch
 
 from ansible.modules.network.dcnm import dcnm_vrf
-from .dcnm_module import TestDcnmModule, set_module_args
+from .dcnm_module import TestDcnmModule, set_module_args, loadPlaybookData
 
+import json, copy
 
 class TestDcnmVrfModule(TestDcnmModule):
 
     module = dcnm_vrf
 
-    mock_ip_sn = {'10.10.10.224': 'XYZKSJHSMK1',
-                  '10.10.10.225': 'XYZKSJHSMK2'}
+    test_data = loadPlaybookData('dcnm_vrf')
 
-    mock_config=\
-        [{'vrf_name': 'test_vrf_1',
-        'vrf_id': '9008011',
-        'vrf_template': 'Default_VRF_Universal',
-        'vrf_extension_template': 'Default_VRF_Extension_Universal',
-        'source': 'None',
-        'service_vrf_template': 'None',
-        'attach': [
-            {'ip_address': '10.10.10.224',
-            'vlan_id': '202',
-            'deploy': 'true'
-            },
-            {'ip_address': '10.10.10.225',
-            'vlan_id': '203',
-            'deploy': 'true'
-            }
-        ],
-        'deploy': 'true'
-        }]
+    mock_ip_sn = test_data.get('mock_ip_sn')
+    playbook_config_input_validation = test_data.get('playbook_config_input_validation')
+    playbook_config = test_data.get('playbook_config')
+    playbook_config_update = test_data.get('playbook_config_update')
+    playbook_config_update_vlan = test_data.get('playbook_config_update_vlan')
+    playbook_config_override = test_data.get('playbook_config_override')
+    playbook_config_incorrect_vrfid = test_data.get('playbook_config_incorrect_vrfid')
+    playbook_config_replace = test_data.get('playbook_config_replace')
+    playbook_config_replace_no_atch = test_data.get('playbook_config_replace_no_atch')
+    mock_vrf_attach_object_del_not_ready = test_data.get('mock_vrf_attach_object_del_not_ready')
+    mock_vrf_attach_object_del_oos = test_data.get('mock_vrf_attach_object_del_oos')
+    mock_vrf_attach_object_del_ready = test_data.get('mock_vrf_attach_object_del_ready')
 
-    mock_config_override = \
-        [{'vrf_name': 'test_vrf_2',
-          'vrf_id': '9008012',
-          'vrf_template': 'Default_VRF_Universal',
-          'vrf_extension_template': 'Default_VRF_Extension_Universal',
-          'source': 'None',
-          'service_vrf_template': 'None',
-          'attach': [
-              {'ip_address': '10.10.10.224',
-               'vlan_id': '302',
-               'deploy': 'true'
-               },
-              {'ip_address': '10.10.10.225',
-               'vlan_id': '303',
-               'deploy': 'true'
-               }
-          ],
-          'deploy': 'true'
-          }]
-
-    mock_config_incorrect_vrfid = \
-        [{'vrf_name': 'test_vrf_1',
-          'vrf_id': '9008012',
-          'vrf_template': 'Default_VRF_Universal',
-          'vrf_extension_template': 'Default_VRF_Extension_Universal',
-          'source': 'None',
-          'service_vrf_template': 'None',
-          'attach': [
-              {'ip_address': '10.10.10.224',
-               'vlan_id': '202',
-               'deploy': 'true'
-               },
-              {'ip_address': '10.10.10.225',
-               'vlan_id': '203',
-               'deploy': 'true'
-               }
-          ],
-          'deploy': 'true'
-          }]
-
-    mock_config_replace = \
-        [{'vrf_name': 'test_vrf_1',
-          'vrf_id': '9008011',
-          'vrf_template': 'Default_VRF_Universal',
-          'vrf_extension_template': 'Default_VRF_Extension_Universal',
-          'source': 'None',
-          'service_vrf_template': 'None',
-          'attach': [
-              {'ip_address': '10.10.10.225',
-               'vlan_id': '203',
-               'deploy': 'true'
-               }
-          ],
-          'deploy': 'true'
-          }]
-
-    mock_vrf_attach_object_del_not_ready = \
-        {'DATA': [
-            {
-                "vrfName": "test_vrf_1",
-                "lanAttachList": [
-                    {
-                        "lanAttachState": "DEPLOYED"
-                    },
-                    {
-                        "lanAttachState": "DEPLOYED"
-                    }
-                ]
-            }
-        ]
-        }
-
-    mock_vrf_attach_object_del_ready = \
-        {'DATA': [
-            {
-                "vrfName": "test_vrf_1",
-                "lanAttachList": [
-                    {
-                        "lanAttachState": "NA"
-                    },
-                    {
-                        "lanAttachState": "NA"
-                    }
-                ]
-            }
-        ]
-        }
-
+    attach_success_resp = test_data.get('attach_success_resp')
+    deploy_success_resp = test_data.get('deploy_success_resp')
+    get_have_failure = test_data.get('get_have_failure')
+    error1 = test_data.get('error1')
+    error2 = test_data.get('error2')
+    error3 = test_data.get('error3')
+    delete_success_resp = test_data.get('delete_success_resp')
 
     def init_data(self):
+        # Some of the mock data is re-initialized after each test as previous test might have altered portions
+        # of the mock data.
 
-        self.mock_vrf_object = \
-            {'ERROR': '',
-             'RETURN_CODE': '',
-             'DATA': [
-                 {
-                     "fabric": "test_fabric",
-                     "vrfName": "test_vrf_1",
-                     "vrfTemplate": "Default_VRF_Universal",
-                     "vrfExtensionTemplate": "Default_VRF_Extension_Universal",
-                     "serviceVrfTemplate": 'None',
-                     "source": 'None',
-                     "vrfStatus": "DEPLOYED",
-                     "vrfId": "9008011"
-                 }
-             ]
-             }
-
-        self.mock_vrf_attach_object = \
-            {'DATA': [
-                {
-                    "vrfName": "test_vrf_1",
-                    "lanAttachList": [
-                        {
-                            "vrfName": "test_vrf_1",
-                            "switchName": "n9kv_leaf1",
-                            "lanAttachState": "DEPLOYED",
-                            "isLanAttached": "true",
-                            "switchSerialNo": "XYZKSJHSMK1",
-                            "switchRole": "leaf",
-                            "fabricName": "test-fabric",
-                            "ipAddress": "10.10.10.224",
-                            "vlanId": "202",
-                            "vrfId": "9008011"
-                        },
-                        {
-                            "vrfName": "test_vrf_1",
-                            "switchName": "n9kv_leaf2",
-                            "lanAttachState": "DEPLOYED",
-                            "isLanAttached": "true",
-                            "switchSerialNo": "XYZKSJHSMK2",
-                            "switchRole": "leaf",
-                            "fabricName": "test-fabric",
-                            "ipAddress": "10.10.10.225",
-                            "vlanId": "203",
-                            "vrfId": "9008011"
-                        }
-                    ]
-                }
-            ]
-            }
+        self.mock_vrf_object = copy.deepcopy(self.test_data.get('mock_vrf_object'))
+        self.mock_vrf_attach_object = copy.deepcopy(self.test_data.get('mock_vrf_attach_object'))
+        self.mock_vrf_attach_object_pending = copy.deepcopy(self.test_data.get('mock_vrf_attach_object_pending'))
+        self.mock_vrf_object_dcnm_only = copy.deepcopy(self.test_data.get('mock_vrf_object_dcnm_only'))
+        self.mock_vrf_attach_object_dcnm_only = copy.deepcopy(self.test_data.get('mock_vrf_attach_object_dcnm_only'))
 
 
     def setUp(self):
@@ -210,13 +79,29 @@ class TestDcnmVrfModule(TestDcnmModule):
         self.mock_dcnm_ip_sn.stop()
 
     def load_fixtures(self, response=None, device=''):
-        attach_success_resp = dict({'vrf-on-switch':'SUCCESS'})
-        deploy_success_resp = dict({"status":""})
-        delete_success_resp = {}
 
-        self.run_dcnm_ip_sn.side_effect = [self.mock_ip_sn]
-        if '_merged_new' in self._testMethodName:
-            self.run_dcnm_send.side_effect = [{'DATA':{}}, {}, attach_success_resp, deploy_success_resp]
+        if 'vrf_blank_fabric' in self._testMethodName:
+            self.run_dcnm_ip_sn.side_effect = [{}]
+        else:
+            self.run_dcnm_ip_sn.side_effect = [self.mock_ip_sn]
+
+        if 'get_have_failure' in self._testMethodName:
+            self.run_dcnm_send.side_effect = [self.get_have_failure]
+
+        elif '_check_mode' in self._testMethodName:
+            self.run_dcnm_send.side_effect = [{'DATA':{}}, {}]
+
+        elif '_merged_new' in self._testMethodName:
+            self.run_dcnm_send.side_effect = [{'DATA': {}}, {}, self.attach_success_resp, self.deploy_success_resp]
+
+        elif 'error1' in self._testMethodName:
+            self.run_dcnm_send.side_effect = [{'DATA': {}}, {}, self.error1, self.deploy_success_resp]
+
+        elif 'error2' in self._testMethodName:
+            self.run_dcnm_send.side_effect = [{'DATA': {}}, {}, self.error2, self.deploy_success_resp]
+
+        elif 'error3' in self._testMethodName:
+            self.run_dcnm_send.side_effect = [{'DATA': {}}, {}, self.attach_success_resp, self.error3]
 
         elif '_merged_duplicate' in self._testMethodName:
             self.init_data()
@@ -226,83 +111,185 @@ class TestDcnmVrfModule(TestDcnmModule):
             self.init_data()
             self.run_dcnm_send.side_effect = [self.mock_vrf_object, self.mock_vrf_attach_object]
 
+        elif '_merged_with_update' in self._testMethodName:
+            self.init_data()
+            self.run_dcnm_send.side_effect = [self.mock_vrf_object, self.mock_vrf_attach_object,
+                                              self.attach_success_resp, self.deploy_success_resp]
+
+        elif '_merged_redeploy' in self._testMethodName:
+            self.init_data()
+            self.run_dcnm_send.side_effect = [self.mock_vrf_object, self.mock_vrf_attach_object_pending,
+                                              self.deploy_success_resp]
+
+        elif 'replace_with_no_atch' in self._testMethodName:
+            self.init_data()
+            self.run_dcnm_send.side_effect = [self.mock_vrf_object, self.mock_vrf_attach_object,
+                                              self.attach_success_resp, self.deploy_success_resp,
+                                              self.delete_success_resp]
+
         elif 'replace_with_changes' in self._testMethodName:
             self.init_data()
             self.run_dcnm_send.side_effect = [self.mock_vrf_object, self.mock_vrf_attach_object,
-                                              attach_success_resp, deploy_success_resp, delete_success_resp]
+                                              self.attach_success_resp, self.deploy_success_resp,
+                                              self.delete_success_resp]
 
         elif 'replace_without_changes' in self._testMethodName:
             self.init_data()
             self.run_dcnm_send.side_effect = [self.mock_vrf_object, self.mock_vrf_attach_object]
 
         elif 'override_with_additions' in self._testMethodName:
-            self.run_dcnm_send.side_effect = [{'DATA':{}}, {}, attach_success_resp, deploy_success_resp]
+            self.run_dcnm_send.side_effect = [{'DATA':{}}, {}, self.attach_success_resp,
+                                              self.deploy_success_resp]
 
         elif 'override_with_deletions' in self._testMethodName:
             self.init_data()
             self.run_dcnm_send.side_effect = [self.mock_vrf_object, self.mock_vrf_attach_object, {},
-                                              attach_success_resp, deploy_success_resp,
+                                              self.attach_success_resp, self.deploy_success_resp,
                                               self.mock_vrf_attach_object_del_not_ready,
                                               self.mock_vrf_attach_object_del_ready,
-                                              delete_success_resp]
+                                              self.delete_success_resp]
 
         elif 'override_without_changes' in self._testMethodName:
             self.init_data()
             self.run_dcnm_send.side_effect = [self.mock_vrf_object, self.mock_vrf_attach_object]
 
-        elif 'dcnm_vrf_delete' in self._testMethodName:
+        elif 'delete_std' in self._testMethodName:
             self.init_data()
             self.run_dcnm_send.side_effect = [self.mock_vrf_object, self.mock_vrf_attach_object,
-                                              attach_success_resp, deploy_success_resp,
+                                              self.attach_success_resp, self.deploy_success_resp,
                                               self.mock_vrf_attach_object_del_not_ready,
                                               self.mock_vrf_attach_object_del_ready,
-                                              delete_success_resp]
+                                              self.delete_success_resp]
+
+        elif 'delete_failure' in self._testMethodName:
+            self.init_data()
+            self.run_dcnm_send.side_effect = [self.mock_vrf_object, self.mock_vrf_attach_object,
+                                              self.attach_success_resp, self.deploy_success_resp,
+                                              self.mock_vrf_attach_object_del_not_ready,
+                                              self.mock_vrf_attach_object_del_oos]
+
+        elif 'delete_dcnm_only' in self._testMethodName:
+            self.init_data()
+            obj1 = copy.deepcopy(self.mock_vrf_attach_object_del_not_ready)
+            obj2 = copy.deepcopy(self.mock_vrf_attach_object_del_ready)
+
+            obj1['DATA'][0].update({'vrfName': 'test_vrf_dcnm'})
+            obj2['DATA'][0].update({'vrfName': 'test_vrf_dcnm'})
+
+            self.run_dcnm_send.side_effect = [self.mock_vrf_object_dcnm_only, self.mock_vrf_attach_object_dcnm_only,
+                                              self.attach_success_resp, self.deploy_success_resp,
+                                              obj1,
+                                              obj2,
+                                              self.delete_success_resp]
+
+        elif 'query' in self._testMethodName:
+            self.init_data()
+            self.run_dcnm_send.side_effect = [self.mock_vrf_object, self.mock_vrf_attach_object]
 
         else:
             pass
 
+    def test_00dcnm_vrf_blank_fabric(self):
+        set_module_args(dict(state='merged',
+                             fabric='test_fabric', config=self.playbook_config))
+        result = self.execute_module(changed=False, failed=True)
+        self.assertEqual(result.get('msg'), 'Fabric test_fabric missing on DCNM or does not have any switches')
 
-    def test_01dcnm_vrf_merged_new(self):
-        set_module_args(dict(state='merged', fabric='test_fabric', config=self.mock_config))
-        result = self.execute_module(changed=True, failed=False)
-        self.assertTrue(result.get('changed'))
+    def test_01dcnm_vrf_get_have_failure(self):
+        set_module_args(dict(state='merged',
+                             fabric='test_fabric', config=self.playbook_config))
+        result = self.execute_module(changed=False, failed=True)
+        self.assertEqual(result.get('msg'), 'Fabric test_fabric not present on DCNM')
 
-    def test_02dcnm_vrf_merged_duplicate(self):
-        set_module_args(dict(state='merged', fabric='test_fabric', config=self.mock_config))
-        result = self.execute_module(changed=False, failed=False)
-        self.assertFalse(result.get('changed'))
+    def test_02dcnm_vrf_merged_redeploy(self):
+        set_module_args(dict(state='merged',
+                             fabric='test_fabric', config=self.playbook_config))
+        self.execute_module(changed=True, failed=False)
 
-    def test_03dcnm_vrf_merged_with_incorrect_vrfid(self):
-        set_module_args(dict(state='merged', fabric='test_fabric', config=self.mock_config_incorrect_vrfid))
+    def test_03dcnm_vrf_check_mode(self):
+        set_module_args(dict(_ansible_check_mode=True, state='merged',
+                             fabric='test_fabric', config=self.playbook_config))
+        self.execute_module(changed=True, failed=False)
+
+    def test_04dcnm_vrf_merged_new(self):
+        set_module_args(dict(state='merged', fabric='test_fabric', config=self.playbook_config))
+        self.execute_module(changed=True, failed=False)
+
+    def test_05dcnm_vrf_merged_duplicate(self):
+        set_module_args(dict(state='merged', fabric='test_fabric', config=self.playbook_config))
+        self.execute_module(changed=False, failed=False)
+
+    def test_06dcnm_vrf_merged_with_incorrect_vrfid(self):
+        set_module_args(dict(state='merged', fabric='test_fabric', config=self.playbook_config_incorrect_vrfid))
         result = self.execute_module(changed=False, failed=True)
         self.assertEqual(result.get('msg'), 'vrf_id for VRF:test_vrf_1 cant be updated to a different value')
 
-    def test_04dcnm_vrf_replace_with_changes(self):
-        set_module_args(dict(state='replaced', fabric='test_fabric', config=self.mock_config_replace))
-        result = self.execute_module(changed=True, failed=False)
-        self.assertTrue(result.get('changed'))
+    def test_07dcnm_vrf_merged_with_update(self):
+        set_module_args(dict(state='merged', fabric='test_fabric', config=self.playbook_config_update))
+        self.execute_module(changed=True, failed=False)
 
-    def test_05dcnm_vrf_replace_without_changes(self):
-        set_module_args(dict(state='replaced', fabric='test_fabric', config=self.mock_config))
-        result = self.execute_module(changed=False, failed=False)
-        self.assertFalse(result.get('changed'))
+    def test_08dcnm_vrf_merged_with_update_vlan(self):
+        set_module_args(dict(state='merged', fabric='test_fabric', config=self.playbook_config_update_vlan))
+        self.execute_module(changed=True, failed=False)
 
-    def test_06dcnm_vrf_override_with_additions(self):
-        set_module_args(dict(state='overridden', fabric='test_fabric', config=self.mock_config))
-        result = self.execute_module(changed=True, failed=False)
-        self.assertTrue(result.get('changed'))
+    def test_09dcnm_vrf_error1(self):
+        set_module_args(dict(state='merged', fabric='test_fabric', config=self.playbook_config))
+        self.execute_module(changed=False, failed=True)
 
-    def test_07dcnm_vrf_override_with_deletions(self):
-        set_module_args(dict(state='overridden', fabric='test_fabric', config=self.mock_config_override))
-        result = self.execute_module(changed=True, failed=False)
-        self.assertTrue(result.get('changed'))
+    def test_10dcnm_vrf_error2(self):
+        set_module_args(dict(state='merged', fabric='test_fabric', config=self.playbook_config))
+        self.execute_module(changed=False, failed=True)
 
-    def test_08dcnm_vrf_override_without_changes(self):
-        set_module_args(dict(state='overridden', fabric='test_fabric', config=self.mock_config))
-        result = self.execute_module(changed=False, failed=False)
-        self.assertFalse(result.get('changed'))
+    def test_11dcnm_vrf_error3(self):
+        set_module_args(dict(state='merged', fabric='test_fabric', config=self.playbook_config))
+        self.execute_module(changed=False, failed=False)
 
-    def test_09dcnm_vrf_delete(self):
-        set_module_args(dict(state='deleted', fabric='test_fabric', config=self.mock_config))
-        result = self.execute_module(changed=True, failed=False)
-        self.assertTrue(result.get('changed'))
+    def test_12dcnm_vrf_replace_with_changes(self):
+        set_module_args(dict(state='replaced', fabric='test_fabric', config=self.playbook_config_replace))
+        self.execute_module(changed=True, failed=False)
+
+    def test_13dcnm_vrf_replace_with_no_atch(self):
+        set_module_args(dict(state='replaced', fabric='test_fabric', config=self.playbook_config_replace_no_atch))
+        self.execute_module(changed=True, failed=False)
+
+    def test_14dcnm_vrf_replace_without_changes(self):
+        set_module_args(dict(state='replaced', fabric='test_fabric', config=self.playbook_config))
+        self.execute_module(changed=False, failed=False)
+
+    def test_15dcnm_vrf_override_with_additions(self):
+        set_module_args(dict(state='overridden', fabric='test_fabric', config=self.playbook_config))
+        self.execute_module(changed=True, failed=False)
+
+    def test_16dcnm_vrf_override_with_deletions(self):
+        set_module_args(dict(state='overridden', fabric='test_fabric', config=self.playbook_config_override))
+        self.execute_module(changed=True, failed=False)
+
+    def test_17dcnm_vrf_override_without_changes(self):
+        set_module_args(dict(state='overridden', fabric='test_fabric', config=self.playbook_config))
+        self.execute_module(changed=False, failed=False)
+
+    def test_18dcnm_vrf_delete_std(self):
+        set_module_args(dict(state='deleted', fabric='test_fabric', config=self.playbook_config))
+        self.execute_module(changed=True, failed=False)
+
+    def test_19dcnm_vrf_delete_dcnm_only(self):
+        set_module_args(dict(state='deleted', fabric='test_fabric', config=[]))
+        self.execute_module(changed=True, failed=False)
+
+    def test_20dcnm_vrf_delete_failure(self):
+        set_module_args(dict(state='deleted', fabric='test_fabric', config=self.playbook_config))
+        result = self.execute_module(changed=False, failed=True)
+        self.assertEqual(result.get('msg'), 'Deletion of VRFs test_vrf_1 has failed')
+
+    def test_21dcnm_vrf_query(self):
+        set_module_args(dict(state='query', fabric='test_fabric', config=self.playbook_config))
+        self.execute_module(changed=False, failed=False)
+
+    def test_22dcnm_vrf_validation(self):
+        set_module_args(dict(state='merged', fabric='test_fabric', config=self.playbook_config_input_validation))
+        self.execute_module(changed=False, failed=True)
+
+    def test_23dcnm_vrf_validation_no_config(self):
+        set_module_args(dict(state='merged', fabric='test_fabric', config=[]))
+        result = self.execute_module(changed=False, failed=True)
+        self.assertEqual(result.get('msg'), 'config: element is mandatory for this state merged')

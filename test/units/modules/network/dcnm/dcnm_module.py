@@ -33,6 +33,18 @@ def set_module_args(args):
 fixture_path = os.path.join(os.path.dirname(__file__), 'fixtures')
 fixture_data = {}
 
+def loadPlaybookData(module_name):
+    path = os.path.join(fixture_path, "{}.json".format(module_name))
+
+    with open(path) as f:
+        data = f.read()
+
+    try:
+        j_data = json.loads(data)
+    except Exception:
+        pass
+
+    return j_data
 
 def load_fixture(module_name, name, device=''):
     path = os.path.join(fixture_path, module_name, device, name)
