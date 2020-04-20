@@ -13,14 +13,14 @@
         "attach": [
           {
             "ip_address": "10.10.10.224",
-            "deploy": "True"
+            "deploy": true
           },
           {
             "vlan_id": "203",
-            "deploy": "True"
+            "deploy": true
           }
         ],
-        "deploy": "True"
+        "deploy": true
       }
     ],
     "playbook_config" : [
@@ -35,15 +35,15 @@
           {
             "ip_address": "10.10.10.224",
             "vlan_id": "202",
-            "deploy": "True"
+            "deploy": true
           },
           {
             "ip_address": "10.10.10.225",
             "vlan_id": "203",
-            "deploy": "True"
+            "deploy": true
           }
         ],
-        "deploy": "True"
+        "deploy": true
       }
     ],
     "playbook_config_update": [
@@ -58,15 +58,15 @@
           {
             "ip_address": "10.10.10.225",
             "vlan_id": "203",
-            "deploy": "True"
+            "deploy": true
           },
           {
             "ip_address": "10.10.10.226",
             "vlan_id": "204",
-            "deploy": "True"
+            "deploy": true
           }
         ],
-        "deploy": "True"
+        "deploy": true
       }
     ],
   "playbook_config_update_vlan": [
@@ -81,15 +81,15 @@
         {
           "ip_address": "10.10.10.225",
           "vlan_id": "303",
-          "deploy": "True"
+          "deploy": true
         },
         {
           "ip_address": "10.10.10.226",
           "vlan_id": "304",
-          "deploy": "True"
+          "deploy": true
         }
       ],
-      "deploy": "True"
+      "deploy": true
     }
   ],
     "playbook_config_override": [
@@ -104,15 +104,15 @@
         {
           "ip_address": "10.10.10.225",
           "vlan_id": "303",
-          "deploy": "True"
+          "deploy": true
         },
         {
           "ip_address": "10.10.10.226",
           "vlan_id": "304",
-          "deploy": "True"
+          "deploy": true
         }
       ],
-      "deploy": "True"
+      "deploy": true
     }
   ],
   "playbook_config_incorrect_vrfid": [
@@ -127,15 +127,15 @@
         {
           "ip_address": "10.10.10.224",
           "vlan_id": "202",
-          "deploy": "True"
+          "deploy": true
         },
         {
           "ip_address": "10.10.10.225",
           "vlan_id": "203",
-          "deploy": "True"
+          "deploy": true
         }
       ],
-      "deploy": "True"
+      "deploy": true
     }
   ],
   "playbook_config_replace": [
@@ -150,15 +150,15 @@
         {
           "ip_address": "10.10.10.225",
           "vlan_id": "203",
-          "deploy": "True"
+          "deploy": true
         },
         {
           "ip_address": "10.10.10.226",
           "vlan_id": "204",
-          "deploy": "True"
+          "deploy": true
         }
       ],
-      "deploy": "True"
+      "deploy": true
     }
   ],
   "playbook_config_replace_no_atch": [
@@ -349,7 +349,8 @@
   },
   "attach_success_resp": {
     "DATA": {
-      "vrf-on-switch": "SUCCESS"
+      "test-vrf-1--XYZKSJHSMK1(leaf1)": "SUCCESS",
+      "test-vrf-1--XYZKSJHSMK2(leaf2)": "SUCCESS"
     },
     "MESSAGE": "OK",
     "METHOD": "POST",
@@ -374,7 +375,10 @@
     "RETURN_CODE": 400
   },
   "error2": {
-    "DATA": "is in use already",
+    "DATA": {
+      "test-vrf-1--XYZKSJHSMK1(leaf1)": "Entered VRF VLAN ID 203 is in use already",
+      "test-vrf-1--XYZKSJHSMK2(leaf2)": "SUCCESS"
+    },
     "ERROR": "",
     "METHOD": "POST",
     "RETURN_CODE": 200
