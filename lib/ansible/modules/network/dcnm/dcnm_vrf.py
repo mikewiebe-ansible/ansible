@@ -16,9 +16,8 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-import json, socket, time
+import json, socket, time, copy
 from ansible.module_utils.network.dcnm.dcnm import get_fabric_inventory_details, dcnm_send, validate_list_of_dicts
-from ansible.module_utils.connection import Connection
 from ansible.module_utils.basic import AnsibleModule
 
 
@@ -257,16 +256,14 @@ EXAMPLES = '''
           service_vrf_template: None
 '''
 
-
 class DcnmVrf:
 
     def __init__(self, module):
         self.module = module
         self.params = module.params
         self.fabric = module.params['fabric']
-        self.config = module.params.get('config')
+        self.config = copy.deepcopy(module.params.get('config'))
         self.check_mode = False
-        self.conn = Connection(module._socket_path)
         self.have_create = []
         self.want_create = []
         self.diff_create = []
@@ -277,6 +274,7 @@ class DcnmVrf:
         self.want_deploy = {}
         self.diff_deploy = {}
         self.diff_delete = {}
+        self.diff_input_format = []
         self.query = []
         self.ip_sn = get_fabric_inventory_details(self.module, self.fabric)
 
@@ -661,7 +659,7 @@ class DcnmVrf:
                 if found:
                     atch_h = have_a['lanAttachList']
                     for a_h in atch_h:
-                        if not a_h['isAttached']:
+                        if not bool(a_h['isAttached']):
                             continue
                         del a_h['isAttached']
                         a_h.update({'deployment': False})
@@ -760,6 +758,88 @@ class DcnmVrf:
         self.diff_create = diff_create
         self.diff_attach = diff_attach
         self.diff_deploy = diff_deploy
+
+
+    def format_diff(self):
+
+        diff = []
+
+        diff_attach = copy.deepcopy(self.diff_attach)
+        diff_deploy = self.diff_deploy['vrfNames'].split(",")
+
+        for want_d in self.diff_create:
+
+            found_a = next((vrf for vrf in diff_attach if vrf['vrfName'] == want_d['vrfName']), None)
+
+            found_c = want_d
+
+            src = found_c['source']
+            found_c.update({'vrf_name': found_c['vrfName']})
+            found_c.update({'vrf_id': found_c['vrfId']})
+            found_c.update({'vrf_template': found_c['vrfTemplate']})
+            found_c.update({'vrf_extension_template': found_c['vrfExtensionTemplate']})
+            del found_c['source']
+            found_c.update({'source': src})
+            found_c.update({'service_vrf_template': found_c['serviceVrfTemplate']})
+            found_c.update({'attach': []})
+
+            del found_c['fabric']
+            del found_c['vrfName']
+            del found_c['vrfId']
+            del found_c['vrfTemplate']
+            del found_c['vrfExtensionTemplate']
+            del found_c['serviceVrfTemplate']
+            del found_c['vrfTemplateConfig']
+
+            diff_deploy.remove(found_c['vrf_name'])
+            if not found_a:
+                diff.append(found_c)
+                continue
+
+            attach = found_a['lanAttachList']
+
+            for a_w in attach:
+                attach_d = {}
+
+                for k, v in self.ip_sn.items():
+                    if v == a_w['serialNumber']:
+                        attach_d.update({'ip_address': k})
+                        break
+                attach_d.update({'vlan_id': a_w['vlan']})
+                attach_d.update({'deploy': a_w['deployment']})
+                found_c['attach'].append(attach_d)
+
+            diff.append(found_c)
+
+            diff_attach.remove(found_a)
+
+        for vrf in diff_attach:
+            new_attach_dict = {}
+            new_attach_list = []
+            attach = vrf['lanAttachList']
+
+            for a_w in attach:
+                attach_d = {}
+
+                for k, v in self.ip_sn.items():
+                    if v == a_w['serialNumber']:
+                        attach_d.update({'ip_address': k})
+                        break
+                attach_d.update({'vlan_id': a_w['vlan']})
+                attach_d.update({'deploy': a_w['deployment']})
+                new_attach_list.append(attach_d)
+
+            if new_attach_list:
+                diff_deploy.remove(vrf['vrfName'])
+                new_attach_dict.update({'attach': new_attach_list})
+                new_attach_dict.update({'vrf_name': vrf['vrfName']})
+                diff.append(new_attach_dict)
+
+        for vrf in diff_deploy:
+            new_deploy_dict = {'vrf_name': vrf}
+            diff.append(new_deploy_dict)
+
+        self.diff_input_format = diff
 
 
     def get_diff_query(self):
@@ -884,7 +964,7 @@ class DcnmVrf:
                 msg =  "config: element is mandatory for this state {}".format(state)
 
         if msg:
-            raise Exception(msg)
+            self.module.fail_json(msg=msg)
 
         if self.config:
             validated = []
@@ -898,7 +978,7 @@ class DcnmVrf:
 
             if invalid_params:
                 msg = 'Invalid parameters in playbook: {}'.format('\n'.join(invalid_params))
-                raise Exception(msg)
+                self.module.fail_json(msg=msg)
 
 
     def handle_response(self, res, op):
@@ -931,7 +1011,8 @@ def main():
 
     result = dict(
         changed=False,
-        response=''
+        diff = [],
+        response=[]
     )
 
     module = AnsibleModule(argument_spec=element_spec,
@@ -995,26 +1076,30 @@ def main():
         module.exit_json(**result)
 
     if dcnm_vrf.diff_create:
-        result['response'] = dcnm_send(dcnm_vrf.module, method, bulk_create_path, json.dumps(dcnm_vrf.diff_create))
-        fail, result['changed'] = dcnm_vrf.handle_response(result['response'], "create")
+        resp = dcnm_send(dcnm_vrf.module, method, bulk_create_path, json.dumps(dcnm_vrf.diff_create))
+        result['response'].append(resp)
+        fail, result['changed'] = dcnm_vrf.handle_response(resp, "create")
         if fail:
-            module.fail_json(msg=result['response'])
+            module.fail_json(msg=resp)
 
     if dcnm_vrf.diff_attach:
         attach_path = path + '/attachments'
-        result['response'] = dcnm_send(dcnm_vrf.module, method, attach_path, json.dumps(dcnm_vrf.diff_attach))
-        fail, result['changed'] = dcnm_vrf.handle_response(result['response'], "attach")
+        resp = dcnm_send(dcnm_vrf.module, method, attach_path, json.dumps(dcnm_vrf.diff_attach))
+        result['response'].append(resp)
+        fail, result['changed'] = dcnm_vrf.handle_response(resp, "attach")
         if fail:
-            module.fail_json(msg=result['response'])
+            module.fail_json(msg=resp)
 
     if dcnm_vrf.diff_deploy:
         deploy_path = path + '/deployments'
-        result['response'] = dcnm_send(dcnm_vrf.module, method, deploy_path, json.dumps(dcnm_vrf.diff_deploy))
-        fail, result['changed'] = dcnm_vrf.handle_response(result['response'], "deploy")
+        resp = dcnm_send(dcnm_vrf.module, method, deploy_path, json.dumps(dcnm_vrf.diff_deploy))
+        result['response'].append(resp)
+        fail, result['changed'] = dcnm_vrf.handle_response(resp, "deploy")
         if fail:
-            module.fail_json(msg=result['response'])
+            module.fail_json(msg=resp)
 
     del_failure = ''
+
     if dcnm_vrf.diff_delete and dcnm_vrf.wait_for_vrf_del_ready():
         method = 'DELETE'
         for vrf, state in dcnm_vrf.diff_delete.items():
@@ -1022,15 +1107,18 @@ def main():
                 del_failure += vrf + ","
                 continue
             delete_path = path + "/" + vrf
-            result['response'] = dcnm_send(dcnm_vrf.module, method, delete_path)
-            fail, result['changed'] = dcnm_vrf.handle_response(result['response'], "delete")
+            resp = dcnm_send(dcnm_vrf.module, method, delete_path)
+            result['response'].append(resp)
+            fail, result['changed'] = dcnm_vrf.handle_response(resp, "delete")
             if fail:
-                module.fail_json(msg=result['response'])
+                module.fail_json(msg=resp)
 
     if del_failure:
-        result['response'] = 'Deletion of VRFs {} has failed'.format(del_failure[:-1])
-        module.fail_json(msg=result['response'])
+        result['response'].append('Deletion of VRFs {} has failed'.format(del_failure[:-1]))
+        module.fail_json(msg=result)
 
+    dcnm_vrf.format_diff()
+    result['diff'] = dcnm_vrf.diff_input_format
     module.exit_json(**result)
 
 
